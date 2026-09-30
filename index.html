@@ -237,6 +237,11 @@
   function questionImageEl(q, revealFrac){
     if(!q || !q.imageUrl || !q.imageUrl.trim()) return null;
     const mode = q.revealMode || 'blur';
+
+    if(mode==='full'){
+      return el('<img class="q-image" src="'+esc(q.imageUrl.trim())+'" alt="" loading="lazy">');
+    }
+
     const revealing = revealFrac!==undefined && revealFrac<1;
 
     if(mode==='tiles'){
@@ -416,9 +421,11 @@
           const revealRow = el('<div class="mode-toggle" style="margin:0 0 10px;"></div>');
           const blurBtn = el('<button type="button" class="mode-btn'+(q.revealMode==='blur'?' active':'')+'">ค่อยๆ เบลอจาง</button>');
           const tilesBtn = el('<button type="button" class="mode-btn'+(q.revealMode==='tiles'?' active':'')+'">เปิดทีละช่อง</button>');
+          const fullBtn = el('<button type="button" class="mode-btn'+(q.revealMode==='full'?' active':'')+'">เปิดมาทั้งรูป</button>');
           blurBtn.addEventListener('click', ()=>{ q.revealMode='blur'; renderQuestionCards(); });
           tilesBtn.addEventListener('click', ()=>{ q.revealMode='tiles'; renderQuestionCards(); });
-          revealRow.appendChild(blurBtn); revealRow.appendChild(tilesBtn);
+          fullBtn.addEventListener('click', ()=>{ q.revealMode='full'; renderQuestionCards(); });
+          revealRow.appendChild(blurBtn); revealRow.appendChild(tilesBtn); revealRow.appendChild(fullBtn);
           imgField.appendChild(revealRow);
         }
 
