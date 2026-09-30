@@ -330,8 +330,27 @@
   }
 
   // ================= HOST: SETUP =================
+  function saveTemplate(){
+    try{ lsSet('qa_template', JSON.stringify({ title:S.quizTitle, questions:S.questions })); }catch(e){}
+  }
+  function loadTemplate(){
+    try{
+      const raw = lsGet('qa_template', null);
+      if(raw) return JSON.parse(raw);
+    }catch(e){}
+    return null;
+  }
+
   function renderHostSetup(){
-    if(S.questions.length===0) S.questions = exampleQuestions();
+    if(S.questions.length===0){
+      const saved = loadTemplate();
+      if(saved && Array.isArray(saved.questions) && saved.questions.length){
+        S.questions = saved.questions;
+        if(!S.quizTitle) S.quizTitle = saved.title || '';
+      } else {
+        S.questions = exampleQuestions();
+      }
+    }
     const app = document.getElementById('app');
     app.innerHTML = '';
     const card = el('<div class="card"></div>');
@@ -459,7 +478,16 @@
 
     app.appendChild(card);
 
-    const btnRow = el('<div style="display:flex;gap:10px;"></div>');
+    const saveBtn = el('<button class="btn btn-secondary btn-block">💾 บันทึกแบบร่าง</button>');
+    saveBtn.addEventListener('click', ()=>{
+      saveTemplate();
+      const original = saveBtn.textContent;
+      saveBtn.textContent = 'บันทึกแล้ว ✓';
+      setTimeout(()=>{ saveBtn.textContent = original; }, 1500);
+    });
+    app.appendChild(saveBtn);
+
+    const btnRow = el('<div style="display:flex;gap:10px;margin-top:10px;"></div>');
     const backBtn = el('<button class="btn btn-ghost">← กลับ</button>');
     backBtn.addEventListener('click', goHome);
     const goBtn = el('<button class="btn btn-primary btn-block btn-lg">สร้างห้อง →</button>');
@@ -484,6 +512,7 @@
     const badIndex = findInvalidQuestion();
     if(badIndex>=0){ alert('กรุณากรอกคำถามข้อที่ '+(badIndex+1)+' ให้ครบ (ทั้งข้อความคำถาม และตัวเลือกทั้ง 4 ช่อง) ก่อนสร้างห้อง'); return; }
     if(!S.db){ alert('ยังเชื่อมต่อฐานข้อมูลไม่ได้ ลองใหม่อีกครั้ง'); return; }
+    saveTemplate();
     let code=null;
     for(let tries=0; tries<6; tries++){
       const candidate = genCode(5);
