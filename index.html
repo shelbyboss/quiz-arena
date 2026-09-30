@@ -119,7 +119,16 @@
     animation:pop .25s ease;
   }
   @keyframes pop{from{transform:scale(.6);opacity:0;}to{transform:scale(1);opacity:1;}}
-  .avatar-badge{border-radius:50%;display:inline-flex;align-items:center;justify-content:center;flex:none;line-height:1;}
+  .avatar-badge{
+    border-radius:50%;display:inline-flex;align-items:center;justify-content:center;flex:none;line-height:1;
+    position:relative;overflow:hidden;
+    box-shadow:0 3px 6px rgba(0,0,0,.35), inset -3px -4px 7px rgba(0,0,0,.28), inset 2px 3px 6px rgba(255,255,255,.5);
+    text-shadow:0 1px 1px rgba(0,0,0,.25);
+  }
+  .avatar-badge::before{
+    content:'';position:absolute;top:8%;left:16%;width:55%;height:32%;
+    background:rgba(255,255,255,.45);border-radius:50%;filter:blur(1.5px);transform:rotate(-18deg);
+  }
   .avatar-picker{margin-bottom:14px;}
   .avatar-preview-row{display:flex;align-items:center;gap:14px;margin-bottom:10px;}
   .color-swatches{display:flex;gap:8px;margin-bottom:10px;}
@@ -368,7 +377,8 @@
     const badge = el('<div class="avatar-badge">'+emoji+'</div>');
     badge.style.width = size+'px'; badge.style.height = size+'px';
     badge.style.fontSize = Math.round(size*0.55)+'px';
-    badge.style.background = color;
+    badge.style.backgroundColor = color;
+    badge.style.background = 'radial-gradient(circle at 32% 26%, color-mix(in srgb, white 55%, '+color+'), '+color+' 62%, color-mix(in srgb, black 35%, '+color+') 100%)';
     return badge;
   }
 
