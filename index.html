@@ -363,9 +363,18 @@
     renderTopbar();
   }
 
+  function findInvalidQuestion(){
+    for(let i=0;i<S.questions.length;i++){
+      const q = S.questions[i];
+      if(!q.text.trim()) return i;
+      if(q.choices.some(c=>!c.trim())) return i;
+    }
+    return -1;
+  }
+
   async function createRoom(){
-    const valid = S.questions.every(q=> q.text.trim() && q.choices.every(c=>c.trim()));
-    if(!valid){ alert('กรุณากรอกคำถามและตัวเลือกให้ครบทุกช่องก่อนสร้างห้อง'); return; }
+    const badIndex = findInvalidQuestion();
+    if(badIndex>=0){ alert('กรุณากรอกคำถามข้อที่ '+(badIndex+1)+' ให้ครบ (ทั้งข้อความคำถาม และตัวเลือกทั้ง 4 ช่อง) ก่อนสร้างห้อง'); return; }
     if(!S.db){ alert('ยังเชื่อมต่อฐานข้อมูลไม่ได้ ลองใหม่อีกครั้ง'); return; }
     let code=null;
     for(let tries=0; tries<6; tries++){
