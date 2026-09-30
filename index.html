@@ -230,6 +230,27 @@
     return el('<img class="q-image" src="'+esc(q.imageUrl.trim())+'" alt="" loading="lazy">');
   }
 
+  function fileToCompressedDataUrl(file, maxDim, quality){
+    return new Promise((resolve, reject)=>{
+      const reader = new FileReader();
+      reader.onerror = ()=>reject(new Error('read_failed'));
+      reader.onload = (e)=>{
+        const img = new Image();
+        img.onerror = ()=>reject(new Error('decode_failed'));
+        img.onload = ()=>{
+          let w=img.width, h=img.height;
+          if(w>maxDim || h>maxDim){ const scale=Math.min(maxDim/w, maxDim/h); w=Math.round(w*scale); h=Math.round(h*scale); }
+          const canvas = document.createElement('canvas');
+          canvas.width=w; canvas.height=h;
+          canvas.getContext('2d').drawImage(img,0,0,w,h);
+          resolve(canvas.toDataURL('image/jpeg', quality));
+        };
+        img.src = e.target.result;
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+
 
   // ---------- global state ----------
   const S = {
@@ -360,11 +381,41 @@
           imgField.appendChild(preview);
         }
 
-        const imgInput = document.createElement('input');
-        imgInput.type='text'; imgInput.placeholder='วางลิงก์รูปภาพ (URL) เช่น https://...'; imgInput.value=q.imageUrl;
-        imgInput.addEventListener('input', ()=>{ q.imageUrl=imgInput.value; });
-        imgField.appendChild(imgInput);
-        imgField.appendChild(el('<div class="muted" style="font-size:12px;margin-top:6px;">ไม่มีลิงก์รูป? อัปโหลดรูปที่ <a href="https://imgur.com/upload" target="_blank" rel="noopener">imgur.com/upload</a> ก่อน (ไม่ต้องสมัครสมาชิก) แล้วคัดลอกลิงก์รูปมาวางตรงนี้</div>'));
+        const uploadRow = el('<div class="upload-row"></div>');
+        const fileInput = document.createElement('input');
+        fileInput.type='file'; fileInput.accept='image/*';
+        const statusSpan = el('<span class="upload-status"></span>');
+        fileInput.addEventListener('change', async ()=>{
+          const file = fileInput.files && fileInput.files[0];
+          if(!file) return;
+          statusSpan.textContent = 'กำลังแปลงรูป...';
+          try{
+            const dataUrl = await fileToCompressedDataUrl(file, 500, 0.65);
+            const approxKB = Math.round(dataUrl.length*0.75/1024);
+            if(approxKB > 180){
+              statusSpan.textContent = 'รูปนี้ใหญ่เกินไป ('+approxKB+'KB) ลองรูปอื่น หรือวางลิงก์รูปแทน';
+              return;
+            }
+            q.imageUrl = dataUrl;
+            statusSpan.textContent = '';
+            renderQuestionCards();
+          }catch(e){
+            console.error(e);
+            statusSpan.textContent = 'แปลงรูปไม่สำเร็จ ลองรูปอื่น หรือวางลิงก์รูปแทน';
+          }
+        });
+        uploadRow.appendChild(fileInput);
+        uploadRow.appendChild(statusSpan);
+        imgField.appendChild(uploadRow);
+
+        const isUploadedImage = q.imageUrl && q.imageUrl.trim().indexOf('data:')===0;
+        if(!isUploadedImage){
+          const imgInput = document.createElement('input');
+          imgInput.type='text'; imgInput.placeholder='หรือวางลิงก์รูปภาพ (URL)'; imgInput.value=q.imageUrl;
+          imgInput.style.marginTop='6px';
+          imgInput.addEventListener('input', ()=>{ q.imageUrl=imgInput.value; });
+          imgField.appendChild(imgInput);
+        }
         qc.appendChild(imgField);
 
         if(!q.mode) q.mode='four';
