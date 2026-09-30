@@ -124,6 +124,11 @@
   .qn-tag{font-family:'Kanit';font-weight:700;color:var(--accent-2);font-size:14px;letter-spacing:1px;}
   .question-text{font-family:'Kanit';font-weight:700;font-size:clamp(20px,5.5vw,28px);line-height:1.3;text-wrap:balance;margin:10px 0 16px;}
   .q-image{width:100%;max-height:280px;object-fit:contain;border-radius:var(--radius-md);margin:8px 0;display:block;background:var(--surface-2);transition:filter .3s linear;}
+  .q-image-wrap{position:relative;width:100%;height:280px;border-radius:var(--radius-md);margin:8px 0;background:var(--surface-2);overflow:hidden;}
+  .q-image-wrap .q-image{margin:0;max-height:none;height:100%;border-radius:0;}
+  .reveal-grid{position:absolute;inset:0;display:grid;}
+  .reveal-tile{background:var(--surface-2);transition:opacity .35s ease;}
+  .reveal-tile.revealed{opacity:0;}
   .img-url-field{margin-top:10px;}
   .img-preview-row{display:flex;align-items:center;gap:10px;margin-bottom:8px;}
   .img-thumb{width:64px;height:64px;object-fit:cover;border-radius:var(--radius-sm);border:1px solid var(--surface-3);flex:none;}
@@ -225,14 +230,36 @@
     }];
   }
 
-  function questionImageEl(q, blurPx){
+  const REVEAL_COLS = 5, REVEAL_ROWS = 4;
+  const REVEAL_TOTAL = REVEAL_COLS * REVEAL_ROWS;
+  const REVEAL_ORDER = [11,3,17,0,14,8,2,19,6,15,1,10,18,4,12,7,16,9,5,13];
+
+  function questionImageEl(q, revealFrac){
     if(!q || !q.imageUrl || !q.imageUrl.trim()) return null;
+    const mode = q.revealMode || 'blur';
+    const revealing = revealFrac!==undefined && revealFrac<1;
+
+    if(mode==='tiles'){
+      const wrap = el('<div class="q-image-wrap"></div>');
+      wrap.appendChild(el('<img class="q-image" src="'+esc(q.imageUrl.trim())+'" alt="" loading="lazy">'));
+      if(revealing){
+        const grid = el('<div class="reveal-grid" style="grid-template-columns:repeat('+REVEAL_COLS+',1fr);grid-template-rows:repeat('+REVEAL_ROWS+',1fr);"></div>');
+        const revealCount = Math.max(0, Math.floor(revealFrac * REVEAL_TOTAL));
+        const revealedSet = new Set(REVEAL_ORDER.slice(0, revealCount));
+        for(let i=0;i<REVEAL_TOTAL;i++){
+          grid.appendChild(el('<div class="reveal-tile'+(revealedSet.has(i)?' revealed':'')+'"></div>'));
+        }
+        wrap.appendChild(grid);
+      }
+      return wrap;
+    }
+
     const img = el('<img class="q-image" src="'+esc(q.imageUrl.trim())+'" alt="" loading="lazy">');
-    if(blurPx>0) img.style.filter = 'blur('+blurPx+'px)';
+    if(revealing){
+      const blurPx = Math.round((1-revealFrac) * 18);
+      if(blurPx>0) img.style.filter = 'blur('+blurPx+'px)';
+    }
     return img;
-  }
-  function revealBlurPx(pct){
-    return Math.round((pct/100) * 18);
   }
 
   function fileToCompressedDataUrl(file, maxDim, quality){
@@ -384,6 +411,15 @@
           rmBtn.addEventListener('click', ()=>{ q.imageUrl=''; renderQuestionCards(); });
           preview.appendChild(rmBtn);
           imgField.appendChild(preview);
+
+          if(!q.revealMode) q.revealMode='blur';
+          const revealRow = el('<div class="mode-toggle" style="margin:0 0 10px;"></div>');
+          const blurBtn = el('<button type="button" class="mode-btn'+(q.revealMode==='blur'?' active':'')+'">ค่อยๆ เบลอจาง</button>');
+          const tilesBtn = el('<button type="button" class="mode-btn'+(q.revealMode==='tiles'?' active':'')+'">เปิดทีละช่อง</button>');
+          blurBtn.addEventListener('click', ()=>{ q.revealMode='blur'; renderQuestionCards(); });
+          tilesBtn.addEventListener('click', ()=>{ q.revealMode='tiles'; renderQuestionCards(); });
+          revealRow.appendChild(blurBtn); revealRow.appendChild(tilesBtn);
+          imgField.appendChild(revealRow);
         }
 
         const uploadRow = el('<div class="upload-row"></div>');
@@ -524,7 +560,7 @@
     const gameData = {
       title: S.quizTitle || 'ควิซไม่มีชื่อ',
       status:'lobby', currentIndex:0, questionStartedAt:null,
-      questions: S.questions.map(q=>({ text:q.text, choices: q.mode==='two' ? q.choices.slice(0,2) : q.choices, correctIndex:q.correctIndex, timeLimitSec:q.timeLimitSec, imageUrl:(q.imageUrl||'').trim() })),
+      questions: S.questions.map(q=>({ text:q.text, choices: q.mode==='two' ? q.choices.slice(0,2) : q.choices, correctIndex:q.correctIndex, timeLimitSec:q.timeLimitSec, imageUrl:(q.imageUrl||'').trim(), revealMode:q.revealMode||'blur' })),
       createdAt: Date.now(),
     };
     await S.db.doc('games/'+code).set(gameData);
@@ -710,7 +746,7 @@
       const {pct, secsLeft} = timerFillStyle(q, g.questionStartedAt);
       const card = el('<div class="card"></div>');
       card.appendChild(el('<div class="qn-tag">คำถามที่ '+(g.currentIndex+1)+' / '+g.questions.length+'</div>'));
-      const qImgHost = questionImageEl(q, revealBlurPx(pct)); if(qImgHost) card.appendChild(qImgHost);
+      const qImgHost = questionImageEl(q, 1-pct/100); if(qImgHost) card.appendChild(qImgHost);
       card.appendChild(el('<div class="question-text">'+esc(q.text)+'</div>'));
       card.appendChild(el('<div class="timerbar"><div class="timerbar-fill" style="width:'+pct+'%;"></div></div>'));
       card.appendChild(el('<div class="timer-label"><span>⏱ เหลือ '+secsLeft+' วิ</span><span>ตอบแล้ว '+S.answersDocs.filter(a=>a.qIndex===g.currentIndex).length+'/'+S.playersDocs.length+' คน</span></div>'));
@@ -788,7 +824,7 @@
       const {pct, secsLeft} = timerFillStyle(q, g.questionStartedAt);
       const card = el('<div class="card"></div>');
       card.appendChild(el('<div class="qn-tag">คำถามที่ '+(g.currentIndex+1)+' / '+g.questions.length+'</div>'));
-      const qImgPlayer = questionImageEl(q, revealBlurPx(pct)); if(qImgPlayer) card.appendChild(qImgPlayer);
+      const qImgPlayer = questionImageEl(q, 1-pct/100); if(qImgPlayer) card.appendChild(qImgPlayer);
       card.appendChild(el('<div class="question-text">'+esc(q.text)+'</div>'));
       card.appendChild(el('<div class="timerbar"><div class="timerbar-fill" style="width:'+pct+'%;"></div></div>'));
       card.appendChild(el('<div class="timer-label"><span>⏱ เหลือ '+secsLeft+' วิ</span><span></span></div>'));
