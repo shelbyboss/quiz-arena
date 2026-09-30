@@ -119,6 +119,15 @@
     animation:pop .25s ease;
   }
   @keyframes pop{from{transform:scale(.6);opacity:0;}to{transform:scale(1);opacity:1;}}
+  .avatar-badge{border-radius:50%;display:inline-flex;align-items:center;justify-content:center;flex:none;line-height:1;}
+  .avatar-picker{margin-bottom:14px;}
+  .avatar-preview-row{display:flex;align-items:center;gap:14px;margin-bottom:10px;}
+  .color-swatches{display:flex;gap:8px;margin-bottom:10px;}
+  .color-swatch{width:28px;height:28px;border-radius:50%;cursor:pointer;border:2px solid transparent;flex:none;}
+  .color-swatch.active{border-color:#fff;}
+  .emoji-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:6px;max-height:160px;overflow-y:auto;}
+  .emoji-btn{background:var(--surface-2);border:1px solid var(--surface-3);border-radius:var(--radius-sm);font-size:20px;padding:6px 0;cursor:pointer;}
+  .emoji-btn.active{border-color:var(--accent);background:var(--surface-3);}
   .muted{color:var(--text-dim);font-size:14px;}
   .center-text{text-align:center;}
   .qn-tag{font-family:'Kanit';font-weight:700;color:var(--accent-2);font-size:14px;letter-spacing:1px;}
@@ -177,6 +186,7 @@
   .podium-1 .podium-block{height:120px;background:linear-gradient(160deg,#F2B705,#a87c00);}
   .podium-2 .podium-block{height:90px;background:linear-gradient(160deg,#9AA5C7,#5d6689);}
   .podium-3 .podium-block{height:70px;background:linear-gradient(160deg,#C97A4A,#7a4a2b);}
+  .podium-col .avatar-badge{margin-bottom:8px;}
   .podium-name{font-weight:700;font-size:13px;margin-top:8px;}
   .podium-score{font-family:'JetBrains Mono';font-size:12px;color:var(--text-dim);}
   .warn-banner{background:rgba(242,183,5,.15);border:1px solid rgba(242,183,5,.4);color:#F2B705;padding:12px 14px;border-radius:var(--radius-sm);font-size:13px;margin-bottom:14px;}
@@ -216,6 +226,8 @@
   }
 
   const SHAPES = ['▲','◆','●','■'];
+  const AVATAR_EMOJI = ['😀','😎','🤠','🥳','🤖','👻','👽','🐱','🐶','🦊','🐼','🐸','🦁','🐯','🐨','🐵','🦄','🐙','🦖','🐧','🍕','⚽','🎮','🎸','🚀','⭐'];
+  const AVATAR_COLORS = ['#E4433C','#2C82E0','#F2B705','#26C281','#7C5CFF','#FF5EA8','#00BCD4','#FF8A3D'];
   const CODE_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
   function genCode(len){
     let s=''; for(let i=0;i<len;i++) s+=CODE_CHARS[Math.floor(Math.random()*CODE_CHARS.length)];
@@ -296,6 +308,7 @@
     code:null, isHost:false, quizTitle:'', questions:[],
     game:null, playersDocs:[], answersDocs:[],
     joinCodeInput:'', joinNameInput:lsGet('qa_name',''), joinError:'',
+    avatarEmoji:lsGet('qa_avatar_emoji','😀'), avatarColor:lsGet('qa_avatar_color','#7C5CFF'),
     subs:[], questionTimer:null, tickTimer:null, myLastAnswer:null,
   };
 
@@ -343,9 +356,20 @@
   function scoreboard(){
     const totals = {};
     S.answersDocs.forEach(a=>{ totals[a.playerId] = (totals[a.playerId]||0) + (a.points||0); });
-    const rows = S.playersDocs.map(p=>({ id:p.id, name:p.name, score: totals[p.id]||0 }));
+    const rows = S.playersDocs.map(p=>({ id:p.id, name:p.name, score: totals[p.id]||0, avatarEmoji:p.avatarEmoji, avatarColor:p.avatarColor }));
     rows.sort((a,b)=> b.score - a.score || a.name.localeCompare(b.name));
     return rows;
+  }
+
+  function avatarBadgeEl(p, size){
+    size = size || 36;
+    const emoji = (p && p.avatarEmoji) || '🙂';
+    const color = (p && p.avatarColor) || '#7C5CFF';
+    const badge = el('<div class="avatar-badge">'+emoji+'</div>');
+    badge.style.width = size+'px'; badge.style.height = size+'px';
+    badge.style.fontSize = Math.round(size*0.55)+'px';
+    badge.style.background = color;
+    return badge;
   }
 
   // ================= HOST: SETUP =================
@@ -656,6 +680,29 @@
     nameField.appendChild(nameInput);
     card.appendChild(nameField);
 
+    const avField = el('<div class="avatar-picker"><label>เลือกอวตาร์</label></div>');
+    const previewRow = el('<div class="avatar-preview-row"></div>');
+    previewRow.appendChild(avatarBadgeEl({avatarEmoji:S.avatarEmoji, avatarColor:S.avatarColor}, 56));
+    previewRow.appendChild(el('<span class="muted">เลือกสีและหน้าตาที่ชอบ</span>'));
+    avField.appendChild(previewRow);
+
+    const swatchRow = el('<div class="color-swatches"></div>');
+    AVATAR_COLORS.forEach(c=>{
+      const sw = el('<div class="color-swatch'+(S.avatarColor===c?' active':'')+'" style="background:'+c+';"></div>');
+      sw.addEventListener('click', ()=>{ S.avatarColor=c; lsSet('qa_avatar_color', c); renderJoin(); });
+      swatchRow.appendChild(sw);
+    });
+    avField.appendChild(swatchRow);
+
+    const emojiGrid = el('<div class="emoji-grid"></div>');
+    AVATAR_EMOJI.forEach(em=>{
+      const eb = el('<button type="button" class="emoji-btn'+(S.avatarEmoji===em?' active':'')+'">'+em+'</button>');
+      eb.addEventListener('click', ()=>{ S.avatarEmoji=em; lsSet('qa_avatar_emoji', em); renderJoin(); });
+      emojiGrid.appendChild(eb);
+    });
+    avField.appendChild(emojiGrid);
+    card.appendChild(avField);
+
     const btnRow = el('<div style="display:flex;gap:10px;margin-top:6px;"></div>');
     const backBtn = el('<button class="btn btn-ghost">← กลับ</button>');
     backBtn.addEventListener('click', goHome);
@@ -679,7 +726,7 @@
     if(data.status !== 'lobby'){ S.joinError='ห้องนี้เริ่มเล่นไปแล้ว ขอรหัสห้องใหม่จากเจ้าของเกม'; render(); return; }
     lsSet('qa_name', name);
     S.playerName = name; S.code=code; S.isHost=false; S.joinError='';
-    await S.db.doc('games/'+code+'/players/'+S.playerId).set({ name, joinedAt:Date.now() });
+    await S.db.doc('games/'+code+'/players/'+S.playerId).set({ name, joinedAt:Date.now(), avatarEmoji:S.avatarEmoji, avatarColor:S.avatarColor });
     S.game = data;
     history.replaceState(null,'','?room='+code);
     subscribeToGame(code);
@@ -740,7 +787,12 @@
       card.appendChild(el('<p class="muted" style="margin-top:14px;">ผู้เล่นเข้าร่วมแล้ว '+rows.length+' คน</p>'));
       const grid = el('<div class="player-grid"></div>');
       if(rows.length===0){ grid.appendChild(el('<span class="muted">ยังไม่มีใครเข้าร่วม...</span>')); }
-      rows.forEach(r=> grid.appendChild(el('<div class="player-chip">👤 '+esc(r.name)+'</div>')));
+      rows.forEach(r=>{
+        const chip = el('<div class="player-chip"></div>');
+        chip.appendChild(avatarBadgeEl(r, 22));
+        chip.appendChild(el('<span>'+esc(r.name)+'</span>'));
+        grid.appendChild(chip);
+      });
       card.appendChild(grid);
       app.appendChild(card);
       const startBtn = el('<button class="btn btn-primary btn-block btn-lg" style="margin-top:16px;">🚀 เริ่มเกม</button>');
@@ -797,6 +849,7 @@
       rows.slice(0,8).forEach((r,i)=>{
         const row = el('<div class="lb-row"></div>');
         row.appendChild(el('<div class="lb-rank">#'+(i+1)+'</div>'));
+        row.appendChild(avatarBadgeEl(r, 28));
         row.appendChild(el('<div class="lb-name">'+esc(r.name)+'</div>'));
         row.appendChild(el('<div class="lb-score">'+r.score+'</div>'));
         lbCard.appendChild(row);
@@ -879,6 +932,7 @@
       rows.slice(0,8).forEach((r,i)=>{
         const row = el('<div class="lb-row'+(r.id===S.playerId?' me':'')+'"></div>');
         row.appendChild(el('<div class="lb-rank">#'+(i+1)+'</div>'));
+        row.appendChild(avatarBadgeEl(r, 28));
         row.appendChild(el('<div class="lb-name">'+esc(r.name)+'</div>'));
         row.appendChild(el('<div class="lb-score">'+r.score+'</div>'));
         lbCard.appendChild(row);
@@ -901,6 +955,7 @@
     [1,0,2].forEach(pos=>{
       const r = rows[pos]; if(!r) return;
       const col = el('<div class="podium-col podium-'+(pos+1)+'"></div>');
+      col.appendChild(avatarBadgeEl(r, 44));
       col.appendChild(el('<div class="podium-block">#'+(pos+1)+'</div>'));
       col.appendChild(el('<div class="podium-name">'+esc(r.name)+'</div>'));
       col.appendChild(el('<div class="podium-score">'+r.score+' คะแนน</div>'));
@@ -914,6 +969,7 @@
     rows.forEach((r,i)=>{
       const row = el('<div class="lb-row'+(r.id===S.playerId?' me':'')+'"></div>');
       row.appendChild(el('<div class="lb-rank">#'+(i+1)+'</div>'));
+      row.appendChild(avatarBadgeEl(r, 28));
       row.appendChild(el('<div class="lb-name">'+esc(r.name)+'</div>'));
       row.appendChild(el('<div class="lb-score">'+r.score+'</div>'));
       lbCard.appendChild(row);
