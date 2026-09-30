@@ -1,0 +1,776 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Quiz Arena</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Kanit:wght@600;700;800&family=Noto+Sans+Thai:wght@400;500;600;700&family=JetBrains+Mono:wght@600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#12102A; --surface:#1E1B42; --surface-2:#292461; --surface-3:#352F79;
+    --text:#F5F3FF; --text-dim:#ABA3D9; --text-faint:#726BA8;
+    --accent:#7C5CFF; --accent-2:#FF5EA8; --ok:#26C281; --bad:#E4433C;
+    --red:#E4433C; --blue:#2C82E0; --yellow:#F2B705; --green:#26C281;
+    --shadow: 0 12px 30px rgba(0,0,0,.35);
+    --radius-lg:20px; --radius-md:14px; --radius-sm:10px;
+  }
+  *{box-sizing:border-box;}
+  html,body{height:100%;margin:0;}
+  body{
+    background:var(--bg); color:var(--text);
+    font-family:'Noto Sans Thai','Noto Sans',system-ui,sans-serif;
+    background-image:
+      radial-gradient(circle at 15% 8%, rgba(124,92,255,.25), transparent 45%),
+      radial-gradient(circle at 90% 85%, rgba(255,94,168,.18), transparent 40%);
+    background-attachment:fixed;
+  }
+  h1,h2,h3,.display{ font-family:'Kanit',system-ui,sans-serif; letter-spacing:.2px; }
+  button{font-family:inherit;}
+  img{max-width:100%;}
+  [hidden]{display:none!important;}
+  ::selection{background:var(--accent);color:#fff;}
+  .app-shell{
+    max-width:640px; margin:0 auto; min-height:100%;
+    display:flex; flex-direction:column;
+    padding: max(16px, env(safe-area-inset-top, 0px)) 16px max(16px, env(safe-area-inset-bottom, 0px));
+    gap:16px;
+  }
+  .topbar{display:flex;align-items:center;justify-content:space-between;gap:12px;}
+  .brand{display:flex;align-items:center;gap:10px;font-family:'Kanit';font-weight:700;font-size:18px;color:var(--text);}
+  .brand .dot{width:10px;height:10px;border-radius:50%;background:var(--accent-2);box-shadow:0 0 12px var(--accent-2);}
+  .room-chip{
+    font-family:'JetBrains Mono';font-weight:700;letter-spacing:2px;
+    background:var(--surface-2);border:1px solid var(--surface-3);
+    padding:6px 12px;border-radius:999px;font-size:13px;color:var(--text-dim);
+  }
+  .exit-btn{
+    background:var(--surface-2);border:1px solid var(--surface-3);color:var(--text-dim);
+    width:34px;height:34px;border-radius:50%;cursor:pointer;font-size:16px;
+    display:flex;align-items:center;justify-content:center;
+  }
+  .exit-btn:hover{color:var(--text);border-color:var(--accent);}
+  .main{flex:1;display:flex;flex-direction:column;gap:18px;}
+  .center-col{flex:1;display:flex;flex-direction:column;justify-content:center;gap:22px;}
+  .card{background:var(--surface);border:1px solid var(--surface-3);border-radius:var(--radius-lg);padding:22px;box-shadow:var(--shadow);}
+  .hero-title{font-size:clamp(30px,8vw,42px);font-weight:800;line-height:1.1;text-wrap:balance;}
+  .hero-sub{color:var(--text-dim);font-size:15px;line-height:1.6;max-width:46ch;}
+  .accent-text{background:linear-gradient(90deg,var(--accent),var(--accent-2));-webkit-background-clip:text;background-clip:text;color:transparent;}
+  .btn{
+    appearance:none;border:none;cursor:pointer;border-radius:var(--radius-md);
+    padding:16px 20px;font-weight:700;font-size:16px;font-family:'Kanit';
+    display:flex;align-items:center;justify-content:center;gap:10px;
+    transition:transform .12s ease, filter .12s ease;
+  }
+  .btn:active{transform:scale(.97);}
+  .btn-primary{background:linear-gradient(135deg,var(--accent),#5b3ff0);color:#fff;box-shadow:0 8px 24px rgba(124,92,255,.35);}
+  .btn-primary:hover{filter:brightness(1.08);}
+  .btn-secondary{background:var(--surface-2);color:var(--text);border:1px solid var(--surface-3);}
+  .btn-secondary:hover{border-color:var(--accent);}
+  .btn-ghost{background:transparent;color:var(--text-dim);border:1px solid var(--surface-3);}
+  .btn:disabled{opacity:.45;cursor:not-allowed;transform:none;}
+  .btn-block{width:100%;}
+  .btn-lg{padding:20px 22px;font-size:18px;}
+  .home-choices{display:grid;gap:14px;}
+  .choice-card{
+    background:var(--surface);border:1px solid var(--surface-3);border-radius:var(--radius-lg);
+    padding:20px;text-align:left;cursor:pointer;display:flex;gap:16px;align-items:center;
+    transition:border-color .15s, transform .12s;
+  }
+  .choice-card:hover{border-color:var(--accent);transform:translateY(-2px);}
+  .choice-card .emoji{font-size:30px;}
+  .choice-card b{font-family:'Kanit';font-size:17px;display:block;}
+  .choice-card span{color:var(--text-dim);font-size:13px;}
+  label{font-size:13px;color:var(--text-dim);font-weight:600;display:block;margin-bottom:6px;}
+  input[type=text]{
+    width:100%;background:var(--surface-2);border:1px solid var(--surface-3);color:var(--text);
+    border-radius:var(--radius-sm);padding:13px 14px;font-size:16px;font-family:inherit;
+  }
+  input[type=text]:focus{outline:none;border-color:var(--accent);}
+  input.mono-code{font-family:'JetBrains Mono';letter-spacing:6px;text-align:center;font-size:22px;font-weight:700;text-transform:uppercase;}
+  .field{margin-bottom:14px;}
+  .q-card{background:var(--surface-2);border:1px solid var(--surface-3);border-radius:var(--radius-md);padding:16px;margin-bottom:12px;}
+  .q-card-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;}
+  .q-index{font-family:'Kanit';font-weight:700;color:var(--accent-2);font-size:13px;letter-spacing:1px;text-transform:uppercase;}
+  .icon-btn{background:transparent;border:none;color:var(--text-faint);cursor:pointer;font-size:15px;padding:4px 8px;}
+  .icon-btn:hover{color:var(--bad);}
+  .choice-inputs{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px;}
+  .choice-input-wrap{display:flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--surface-3);border-radius:var(--radius-sm);padding:6px 10px;}
+  .choice-input-wrap input[type=text]{background:transparent;border:none;padding:8px 4px;font-size:14px;}
+  .choice-input-wrap input[type=text]:focus{border:none;}
+  .shape-dot{width:20px;height:20px;border-radius:6px;flex:none;display:flex;align-items:center;justify-content:center;font-size:12px;color:#fff;}
+  .shape-0{background:var(--red);} .shape-1{background:var(--blue);} .shape-2{background:var(--yellow);} .shape-3{background:var(--green);}
+  .correct-radio{width:20px;height:20px;flex:none;accent-color:var(--ok);}
+  .timelimit-row{display:flex;align-items:center;gap:10px;margin-top:10px;font-size:13px;color:var(--text-dim);}
+  .timelimit-row input[type=range]{flex:1;accent-color:var(--accent);}
+  .code-display{
+    font-family:'JetBrains Mono';font-size:clamp(42px,14vw,64px);font-weight:700;letter-spacing:10px;
+    text-align:center;color:var(--text);background:var(--surface-2);border:2px dashed var(--surface-3);
+    border-radius:var(--radius-lg);padding:22px 10px;margin:6px 0;
+  }
+  .player-grid{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px;min-height:44px;}
+  .player-chip{
+    background:var(--surface-2);border:1px solid var(--surface-3);border-radius:999px;
+    padding:8px 14px;font-size:14px;font-weight:600;display:flex;align-items:center;gap:6px;
+    animation:pop .25s ease;
+  }
+  @keyframes pop{from{transform:scale(.6);opacity:0;}to{transform:scale(1);opacity:1;}}
+  .muted{color:var(--text-dim);font-size:14px;}
+  .center-text{text-align:center;}
+  .qn-tag{font-family:'Kanit';font-weight:700;color:var(--accent-2);font-size:14px;letter-spacing:1px;}
+  .question-text{font-family:'Kanit';font-weight:700;font-size:clamp(20px,5.5vw,28px);line-height:1.3;text-wrap:balance;margin:10px 0 16px;}
+  .timerbar{height:12px;border-radius:999px;background:var(--surface-2);overflow:hidden;margin-bottom:6px;}
+  .timerbar-fill{height:100%;background:linear-gradient(90deg,var(--accent),var(--accent-2));width:100%;}
+  .timer-label{display:flex;justify-content:space-between;font-size:12px;color:var(--text-dim);margin-bottom:14px;}
+  .answers-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+  .answer-tile{
+    border:none;border-radius:var(--radius-md);padding:22px 14px;min-height:96px;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;
+    color:#fff;font-family:'Kanit';font-weight:700;font-size:15px;cursor:pointer;text-align:center;
+    transition:transform .12s, filter .12s, opacity .15s;
+  }
+  .answer-tile .shape{font-size:26px;line-height:1;}
+  .answer-tile:active{transform:scale(.96);}
+  .answer-tile:disabled{cursor:default;}
+  .at-0{background:linear-gradient(160deg,var(--red),#b8241e);}
+  .at-1{background:linear-gradient(160deg,var(--blue),#1c5aa0);}
+  .at-2{background:linear-gradient(160deg,var(--yellow),#c08e00);}
+  .at-3{background:linear-gradient(160deg,var(--green),#0f8f5f);}
+  .answer-tile.dim{opacity:.35;}
+  .answer-tile.picked{outline:3px solid #fff;}
+  .bars{display:flex;flex-direction:column;gap:10px;margin:14px 0;}
+  .bar-row{display:flex;align-items:center;gap:10px;}
+  .bar-shape{width:26px;height:26px;border-radius:7px;flex:none;display:flex;align-items:center;justify-content:center;color:#fff;font-size:13px;}
+  .bar-track{flex:1;height:26px;background:var(--surface-2);border-radius:8px;overflow:hidden;position:relative;}
+  .bar-fill{height:100%;border-radius:8px;transition:width .5s ease;}
+  .bar-count{width:28px;text-align:right;font-family:'JetBrains Mono';font-size:13px;color:var(--text-dim);}
+  .bar-row.is-correct .bar-track{box-shadow:0 0 0 2px var(--ok) inset;}
+  .feedback-badge{text-align:center;padding:26px 16px;border-radius:var(--radius-lg);margin-bottom:16px;}
+  .feedback-badge.good{background:linear-gradient(135deg,rgba(38,194,129,.22),rgba(38,194,129,.06));border:1px solid rgba(38,194,129,.4);}
+  .feedback-badge.bad{background:linear-gradient(135deg,rgba(228,67,60,.22),rgba(228,67,60,.06));border:1px solid rgba(228,67,60,.4);}
+  .feedback-badge .big{font-family:'Kanit';font-weight:800;font-size:26px;}
+  .feedback-badge .pts{font-family:'JetBrains Mono';font-size:15px;color:var(--text-dim);margin-top:4px;}
+  .lb-row{display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:var(--radius-sm);background:var(--surface-2);margin-bottom:8px;}
+  .lb-row.me{border:1.5px solid var(--accent);}
+  .lb-rank{font-family:'JetBrains Mono';font-weight:700;color:var(--accent-2);width:26px;}
+  .lb-name{flex:1;font-weight:600;}
+  .lb-score{font-family:'JetBrains Mono';font-weight:700;}
+  .podium{display:flex;align-items:flex-end;gap:10px;justify-content:center;margin:20px 0 10px;}
+  .podium-col{flex:1;max-width:140px;text-align:center;}
+  .podium-block{border-radius:12px 12px 0 0;display:flex;align-items:flex-start;justify-content:center;padding-top:10px;font-family:'JetBrains Mono';font-weight:700;color:#fff;}
+  .podium-1 .podium-block{height:120px;background:linear-gradient(160deg,#F2B705,#a87c00);}
+  .podium-2 .podium-block{height:90px;background:linear-gradient(160deg,#9AA5C7,#5d6689);}
+  .podium-3 .podium-block{height:70px;background:linear-gradient(160deg,#C97A4A,#7a4a2b);}
+  .podium-name{font-weight:700;font-size:13px;margin-top:8px;}
+  .podium-score{font-family:'JetBrains Mono';font-size:12px;color:var(--text-dim);}
+  .warn-banner{background:rgba(242,183,5,.15);border:1px solid rgba(242,183,5,.4);color:#F2B705;padding:12px 14px;border-radius:var(--radius-sm);font-size:13px;margin-bottom:14px;}
+  .err-banner{background:rgba(228,67,60,.15);border:1px solid rgba(228,67,60,.4);color:#ff8b85;padding:12px 14px;border-radius:var(--radius-sm);font-size:13px;margin-bottom:14px;}
+  .footer-note{text-align:center;color:var(--text-faint);font-size:12px;margin-top:auto;padding-top:10px;}
+  a{color:var(--accent-2);}
+</style>
+</head>
+<body>
+<div class="app-shell">
+  <div class="topbar" id="topbar"></div>
+  <div class="main" id="app"></div>
+</div>
+
+<!-- Firebase (client SDK, config below is public by design — protected by Firestore rules, not secrecy) -->
+<script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
+<script src="firebase-config.js"></script>
+
+<script>
+(function(){
+  "use strict";
+
+  // ---------- helpers ----------
+  function el(html){ const t=document.createElement('template'); t.innerHTML=html.trim(); return t.content.firstElementChild; }
+  function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+  function lsGet(k,d){ try{ const v=localStorage.getItem(k); return v===null?d:v; }catch(e){ return d; } }
+  function lsSet(k,v){ try{ localStorage.setItem(k,v); }catch(e){} }
+
+  function getPlayerId(){
+    let id = lsGet('qa_pid', null);
+    if(!id){
+      id = 'p_' + (crypto.randomUUID ? crypto.randomUUID().replace(/-/g,'') : (Math.random().toString(36).slice(2)+Date.now().toString(36)));
+      lsSet('qa_pid', id);
+    }
+    return id;
+  }
+
+  const SHAPES = ['▲','◆','●','■'];
+  const CODE_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+  function genCode(len){
+    let s=''; for(let i=0;i<len;i++) s+=CODE_CHARS[Math.floor(Math.random()*CODE_CHARS.length)];
+    return s;
+  }
+
+  function exampleQuestions(){
+    return [{
+      text:'เมืองหลวงของประเทศไทยคือที่ใด? (ตัวอย่างคำถาม แก้ไข/ลบได้)',
+      choices:['กรุงเทพมหานคร','เชียงใหม่','ภูเก็ต','ขอนแก่น'],
+      correctIndex:0, timeLimitSec:20
+    }];
+  }
+
+  // ---------- global state ----------
+  const S = {
+    screen:'home', dbState:'loading', db:null,
+    playerId:getPlayerId(), playerName:lsGet('qa_name',''),
+    code:null, isHost:false, quizTitle:'', questions:[],
+    game:null, playersDocs:[], answersDocs:[],
+    joinCodeInput:'', joinNameInput:lsGet('qa_name',''), joinError:'',
+    subs:[], questionTimer:null, tickTimer:null, myLastAnswer:null,
+  };
+
+  function clearSubs(){
+    S.subs.forEach(u=>{ try{u();}catch(e){} });
+    S.subs=[];
+    if(S.questionTimer){ clearTimeout(S.questionTimer); S.questionTimer=null; }
+    if(S.tickTimer){ clearInterval(S.tickTimer); S.tickTimer=null; }
+  }
+
+  function goHome(){
+    clearSubs();
+    S.screen='home'; S.code=null; S.isHost=false; S.game=null;
+    S.playersDocs=[]; S.answersDocs=[]; S.myLastAnswer=null; S.joinError='';
+    history.replaceState(null,'',location.pathname);
+    render();
+  }
+
+  function exitCurrent(){
+    if(S.screen==='home'){ return; }
+    if(confirm('ออกจากหน้านี้และกลับหน้าแรกใช่ไหม?')){ goHome(); }
+  }
+
+  // ---------- db init ----------
+  function initDb(){
+    try{
+      if(typeof firebase==='undefined' || !window.__FIREBASE_CONFIG__ || !window.__FIREBASE_CONFIG__.apiKey || window.__FIREBASE_CONFIG__.apiKey.indexOf('YOUR_')===0){
+        S.dbState='unavailable'; render(); return;
+      }
+      firebase.initializeApp(window.__FIREBASE_CONFIG__);
+      S.db = firebase.firestore();
+      S.dbState='ready';
+      maybeAutoJoinFromUrl();
+      render();
+    }catch(e){ console.error(e); S.dbState='unavailable'; render(); }
+  }
+
+  function maybeAutoJoinFromUrl(){
+    const params = new URLSearchParams(location.search);
+    const c = (params.get('room')||'').toUpperCase().replace(/[^A-Z0-9]/g,'');
+    if(c){ S.joinCodeInput=c; S.screen='join'; }
+  }
+
+  // ---------- scoring derivation ----------
+  function scoreboard(){
+    const totals = {};
+    S.answersDocs.forEach(a=>{ totals[a.playerId] = (totals[a.playerId]||0) + (a.points||0); });
+    const rows = S.playersDocs.map(p=>({ id:p.id, name:p.name, score: totals[p.id]||0 }));
+    rows.sort((a,b)=> b.score - a.score || a.name.localeCompare(b.name));
+    return rows;
+  }
+
+  // ================= HOST: SETUP =================
+  function renderHostSetup(){
+    if(S.questions.length===0) S.questions = exampleQuestions();
+    const app = document.getElementById('app');
+    app.innerHTML = '';
+    const card = el('<div class="card"></div>');
+    card.appendChild(el('<h2 style="margin:0 0 4px;">ตั้งค่าเกม</h2>'));
+    card.appendChild(el('<p class="muted" style="margin:0 0 16px;">ตั้งชื่อเกมและใส่คำถาม จากนั้นกด "สร้างห้อง"</p>'));
+
+    const titleField = el('<div class="field"><label>ชื่อเกม</label></div>');
+    const titleInput = document.createElement('input');
+    titleInput.type='text'; titleInput.placeholder='เช่น ควิซปาร์ตี้ประจำเดือน'; titleInput.value=S.quizTitle;
+    titleInput.addEventListener('input', ()=>{ S.quizTitle = titleInput.value; });
+    titleField.appendChild(titleInput);
+    card.appendChild(titleField);
+
+    const qList = document.createElement('div');
+    qList.id='qList';
+    card.appendChild(qList);
+
+    function renderQuestionCards(){
+      qList.innerHTML='';
+      S.questions.forEach((q, qi)=>{
+        const qc = el('<div class="q-card"></div>');
+        const head = el('<div class="q-card-head"></div>');
+        head.appendChild(el('<div class="q-index">คำถามที่ '+(qi+1)+'</div>'));
+        if(S.questions.length>1){
+          const del = el('<button class="icon-btn" title="ลบคำถาม">✕ ลบ</button>');
+          del.addEventListener('click', ()=>{ S.questions.splice(qi,1); renderQuestionCards(); });
+          head.appendChild(del);
+        }
+        qc.appendChild(head);
+
+        const qText = document.createElement('input');
+        qText.type='text'; qText.placeholder='พิมพ์คำถาม...'; qText.value=q.text;
+        qText.addEventListener('input', ()=>{ q.text=qText.value; });
+        qc.appendChild(qText);
+
+        const choicesWrap = el('<div class="choice-inputs"></div>');
+        for(let ci=0; ci<4; ci++){
+          const wrap = el('<div class="choice-input-wrap"></div>');
+          wrap.appendChild(el('<div class="shape-dot shape-'+ci+'">'+SHAPES[ci]+'</div>'));
+          const radio = document.createElement('input');
+          radio.type='radio'; radio.name='correct_'+qi; radio.className='correct-radio';
+          radio.checked = q.correctIndex===ci;
+          radio.title='ตั้งเป็นคำตอบที่ถูก';
+          radio.addEventListener('change', ()=>{ q.correctIndex=ci; });
+          wrap.appendChild(radio);
+          const cinput = document.createElement('input');
+          cinput.type='text'; cinput.placeholder='ตัวเลือกที่ '+(ci+1); cinput.value=q.choices[ci]||'';
+          cinput.addEventListener('input', ()=>{ q.choices[ci]=cinput.value; });
+          wrap.appendChild(cinput);
+          choicesWrap.appendChild(wrap);
+        }
+        qc.appendChild(choicesWrap);
+
+        const tl = el('<div class="timelimit-row"><span>⏱</span></div>');
+        const range = document.createElement('input');
+        range.type='range'; range.min='10'; range.max='60'; range.step='5'; range.value=q.timeLimitSec;
+        const tlLabel = el('<span>'+q.timeLimitSec+' วิ</span>');
+        range.addEventListener('input', ()=>{ q.timeLimitSec=parseInt(range.value,10); tlLabel.textContent=q.timeLimitSec+' วิ'; });
+        tl.appendChild(range); tl.appendChild(tlLabel);
+        qc.appendChild(tl);
+
+        qList.appendChild(qc);
+      });
+    }
+    renderQuestionCards();
+
+    const addBtn = el('<button class="btn btn-secondary btn-block" style="margin-top:4px;">+ เพิ่มคำถาม</button>');
+    addBtn.addEventListener('click', ()=>{
+      S.questions.push({text:'', choices:['','','',''], correctIndex:0, timeLimitSec:20});
+      renderQuestionCards();
+    });
+    card.appendChild(addBtn);
+
+    app.appendChild(card);
+
+    const btnRow = el('<div style="display:flex;gap:10px;"></div>');
+    const backBtn = el('<button class="btn btn-ghost">← กลับ</button>');
+    backBtn.addEventListener('click', goHome);
+    const goBtn = el('<button class="btn btn-primary btn-block btn-lg">สร้างห้อง →</button>');
+    goBtn.addEventListener('click', createRoom);
+    btnRow.appendChild(backBtn); btnRow.appendChild(goBtn);
+    app.appendChild(btnRow);
+
+    renderTopbar();
+  }
+
+  async function createRoom(){
+    const valid = S.questions.every(q=> q.text.trim() && q.choices.every(c=>c.trim()));
+    if(!valid){ alert('กรุณากรอกคำถามและตัวเลือกให้ครบทุกช่องก่อนสร้างห้อง'); return; }
+    if(!S.db){ alert('ยังเชื่อมต่อฐานข้อมูลไม่ได้ ลองใหม่อีกครั้ง'); return; }
+    let code=null;
+    for(let tries=0; tries<6; tries++){
+      const candidate = genCode(5);
+      const snap = await S.db.doc('games/'+candidate).get();
+      if(!snap.exists){ code=candidate; break; }
+    }
+    if(!code){ alert('สร้างห้องไม่สำเร็จ ลองอีกครั้ง'); return; }
+    const gameData = {
+      title: S.quizTitle || 'ควิซไม่มีชื่อ',
+      status:'lobby', currentIndex:0, questionStartedAt:null,
+      questions: S.questions.map(q=>({ text:q.text, choices:q.choices, correctIndex:q.correctIndex, timeLimitSec:q.timeLimitSec })),
+      createdAt: Date.now(),
+    };
+    await S.db.doc('games/'+code).set(gameData);
+    S.code=code; S.isHost=true; S.game=gameData;
+    history.replaceState(null,'','?room='+code);
+    subscribeToGame(code);
+    S.screen='host-play'; render();
+  }
+
+  // ================= SUBSCRIPTIONS (shared host/player) =================
+  function subscribeToGame(code){
+    clearSubs();
+    const uGame = S.db.doc('games/'+code).onSnapshot(snap=>{
+      if(!snap.exists){ S.game=null; render(); return; }
+      S.game = snap.data();
+      onGameChanged();
+      render();
+    }, err=>{ console.error(err); });
+    const uPlayers = S.db.collection('games/'+code+'/players').onSnapshot(qs=>{
+      S.playersDocs = qs.docs.map(d=>({ id:d.id, ...d.data() }));
+      render();
+    }, err=>{ console.error(err); });
+    const uAnswers = S.db.collection('games/'+code+'/answers').onSnapshot(qs=>{
+      S.answersDocs = qs.docs.map(d=>({ id:d.id, ...d.data() }));
+      S.myLastAnswer = S.answersDocs.find(a=> a.playerId===S.playerId && a.qIndex===(S.game?S.game.currentIndex:-1)) || null;
+      render();
+    }, err=>{ console.error(err); });
+    S.subs.push(uGame, uPlayers, uAnswers);
+  }
+
+  function onGameChanged(){
+    if(!S.game) return;
+    if(S.isHost){
+      if(S.game.status==='question'){
+        if(S.questionTimer) clearTimeout(S.questionTimer);
+        const q = S.game.questions[S.game.currentIndex];
+        const limitMs = (q.timeLimitSec||20)*1000;
+        const remaining = limitMs - (Date.now() - (S.game.questionStartedAt||Date.now()));
+        S.questionTimer = setTimeout(()=>{ revealCurrent(); }, Math.max(300, remaining+250));
+      } else if(S.questionTimer){
+        clearTimeout(S.questionTimer); S.questionTimer=null;
+      }
+    }
+    if(S.tickTimer){ clearInterval(S.tickTimer); S.tickTimer=null; }
+    if(S.game.status==='question'){ S.tickTimer = setInterval(render, 250); }
+  }
+
+  // ================= HOST controls =================
+  async function startGame(){
+    await S.db.doc('games/'+S.code).update({ status:'question', currentIndex:0, questionStartedAt:Date.now() });
+  }
+  async function revealCurrent(){
+    if(!S.game || S.game.status!=='question') return;
+    await S.db.doc('games/'+S.code).update({ status:'reveal' });
+  }
+  async function nextQuestion(){
+    const nextIdx = S.game.currentIndex+1;
+    if(nextIdx >= S.game.questions.length){
+      await S.db.doc('games/'+S.code).update({ status:'ended' });
+    } else {
+      await S.db.doc('games/'+S.code).update({ status:'question', currentIndex:nextIdx, questionStartedAt:Date.now() });
+    }
+  }
+
+  // ================= JOIN / PLAYER =================
+  function renderJoin(){
+    const app = document.getElementById('app');
+    app.innerHTML='';
+    const card = el('<div class="card"></div>');
+    card.appendChild(el('<h2 style="margin:0 0 4px;">เข้าร่วมเกม</h2>'));
+    card.appendChild(el('<p class="muted" style="margin:0 0 18px;">ใส่รหัสห้องที่เจ้าของเกมให้มา</p>'));
+    if(S.joinError) card.appendChild(el('<div class="err-banner">'+esc(S.joinError)+'</div>'));
+
+    const codeField = el('<div class="field"><label>รหัสห้อง</label></div>');
+    const codeInput = document.createElement('input');
+    codeInput.type='text'; codeInput.className='mono-code'; codeInput.maxLength=6; codeInput.placeholder='XXXXX';
+    codeInput.value=S.joinCodeInput;
+    codeInput.addEventListener('input', ()=>{ S.joinCodeInput = codeInput.value.toUpperCase().replace(/[^A-Z0-9]/g,''); codeInput.value=S.joinCodeInput; });
+    codeField.appendChild(codeInput);
+    card.appendChild(codeField);
+
+    const nameField = el('<div class="field"><label>ชื่อของคุณ</label></div>');
+    const nameInput = document.createElement('input');
+    nameInput.type='text'; nameInput.placeholder='ชื่อเล่น'; nameInput.maxLength=24; nameInput.value=S.joinNameInput;
+    nameInput.addEventListener('input', ()=>{ S.joinNameInput = nameInput.value; });
+    nameField.appendChild(nameInput);
+    card.appendChild(nameField);
+
+    const btnRow = el('<div style="display:flex;gap:10px;margin-top:6px;"></div>');
+    const backBtn = el('<button class="btn btn-ghost">← กลับ</button>');
+    backBtn.addEventListener('click', goHome);
+    const joinBtn = el('<button class="btn btn-primary btn-block btn-lg">เข้าร่วม →</button>');
+    joinBtn.addEventListener('click', doJoin);
+    btnRow.appendChild(backBtn); btnRow.appendChild(joinBtn);
+    card.appendChild(btnRow);
+
+    app.appendChild(card);
+    renderTopbar();
+  }
+
+  async function doJoin(){
+    const code = S.joinCodeInput.trim();
+    const name = S.joinNameInput.trim();
+    if(!code || !name){ S.joinError='กรุณากรอกรหัสห้องและชื่อให้ครบ'; render(); return; }
+    if(!S.db){ S.joinError='เชื่อมต่อฐานข้อมูลไม่ได้'; render(); return; }
+    const snap = await S.db.doc('games/'+code).get();
+    if(!snap.exists){ S.joinError='ไม่พบห้องนี้ ตรวจสอบรหัสอีกครั้ง'; render(); return; }
+    const data = snap.data();
+    if(data.status !== 'lobby'){ S.joinError='ห้องนี้เริ่มเล่นไปแล้ว ขอรหัสห้องใหม่จากเจ้าของเกม'; render(); return; }
+    lsSet('qa_name', name);
+    S.playerName = name; S.code=code; S.isHost=false; S.joinError='';
+    await S.db.doc('games/'+code+'/players/'+S.playerId).set({ name, joinedAt:Date.now() });
+    S.game = data;
+    history.replaceState(null,'','?room='+code);
+    subscribeToGame(code);
+    S.screen='player-play'; render();
+  }
+
+  async function submitAnswer(ci){
+    if(!S.game || S.game.status!=='question' || S.myLastAnswer) return;
+    const idx = S.game.currentIndex;
+    const q = S.game.questions[idx];
+    const now = Date.now();
+    const limitMs = (q.timeLimitSec||20)*1000;
+    const elapsed = now - (S.game.questionStartedAt||now);
+    const correct = ci === q.correctIndex;
+    const frac = Math.max(0, Math.min(1, 1 - elapsed/limitMs));
+    const points = correct ? Math.round(500 + 500*frac) : 0;
+    S.myLastAnswer = { qIndex:idx, playerId:S.playerId, choiceIndex:ci, correct, points, answeredAtMs:now };
+    render();
+    await S.db.doc('games/'+S.code+'/answers/'+idx+'_'+S.playerId).set(S.myLastAnswer);
+  }
+
+  // ================= SHARED PLAY RENDERING =================
+  function renderTopbar(){
+    const bar = document.getElementById('topbar');
+    bar.innerHTML='';
+    const brand = el('<div class="brand"><span class="dot"></span> Quiz Arena</div>');
+    bar.appendChild(brand);
+    const right = el('<div style="display:flex;align-items:center;gap:10px;"></div>');
+    if(S.code) right.appendChild(el('<div class="room-chip">'+esc(S.code)+'</div>'));
+    if(S.screen!=='home'){
+      const exitBtn = el('<button class="exit-btn" title="ออก">✕</button>');
+      exitBtn.addEventListener('click', exitCurrent);
+      right.appendChild(exitBtn);
+    }
+    bar.appendChild(right);
+  }
+
+  function timerFillStyle(q, startedAt){
+    const limitMs=(q.timeLimitSec||20)*1000;
+    const remain = Math.max(0, limitMs - (Date.now()-(startedAt||Date.now())));
+    const pct = Math.max(0, Math.min(100, remain/limitMs*100));
+    return { pct, secsLeft: Math.ceil(remain/1000) };
+  }
+
+  function renderHostPlay(){
+    const app = document.getElementById('app'); app.innerHTML='';
+    if(!S.game){ app.appendChild(el('<div class="card center-text muted">กำลังโหลด...</div>')); renderTopbar(); return; }
+    const g = S.game;
+
+    if(g.status==='lobby'){
+      const card = el('<div class="card"></div>');
+      card.appendChild(el('<h2 style="margin:0 0 10px;">'+esc(g.title)+'</h2>'));
+      card.appendChild(el('<p class="muted" style="margin:0 0 4px;">บอกรหัสนี้หรือส่งลิงก์ให้ผู้เล่น</p>'));
+      card.appendChild(el('<div class="code-display">'+esc(S.code)+'</div>'));
+      const linkRow = el('<div class="muted" style="word-break:break-all;font-size:12px;text-align:center;">'+esc(location.origin+location.pathname+'?room='+S.code)+'</div>');
+      card.appendChild(linkRow);
+      const rows = scoreboard();
+      card.appendChild(el('<p class="muted" style="margin-top:14px;">ผู้เล่นเข้าร่วมแล้ว '+rows.length+' คน</p>'));
+      const grid = el('<div class="player-grid"></div>');
+      if(rows.length===0){ grid.appendChild(el('<span class="muted">ยังไม่มีใครเข้าร่วม...</span>')); }
+      rows.forEach(r=> grid.appendChild(el('<div class="player-chip">👤 '+esc(r.name)+'</div>')));
+      card.appendChild(grid);
+      app.appendChild(card);
+      const startBtn = el('<button class="btn btn-primary btn-block btn-lg" style="margin-top:16px;">🚀 เริ่มเกม</button>');
+      startBtn.addEventListener('click', startGame);
+      app.appendChild(startBtn);
+    }
+
+    else if(g.status==='question'){
+      const q = g.questions[g.currentIndex];
+      const {pct, secsLeft} = timerFillStyle(q, g.questionStartedAt);
+      const card = el('<div class="card"></div>');
+      card.appendChild(el('<div class="qn-tag">คำถามที่ '+(g.currentIndex+1)+' / '+g.questions.length+'</div>'));
+      card.appendChild(el('<div class="question-text">'+esc(q.text)+'</div>'));
+      card.appendChild(el('<div class="timerbar"><div class="timerbar-fill" style="width:'+pct+'%;"></div></div>'));
+      card.appendChild(el('<div class="timer-label"><span>⏱ เหลือ '+secsLeft+' วิ</span><span>ตอบแล้ว '+S.answersDocs.filter(a=>a.qIndex===g.currentIndex).length+'/'+S.playersDocs.length+' คน</span></div>'));
+      const grid = el('<div class="answers-grid"></div>');
+      q.choices.forEach((c,ci)=>{ grid.appendChild(el('<div class="answer-tile at-'+ci+'"><div class="shape">'+SHAPES[ci]+'</div><div>'+esc(c)+'</div></div>')); });
+      card.appendChild(grid);
+      app.appendChild(card);
+      const revealBtn = el('<button class="btn btn-secondary btn-block" style="margin-top:14px;">ดูผลลัพธ์ตอนนี้ →</button>');
+      revealBtn.addEventListener('click', revealCurrent);
+      app.appendChild(revealBtn);
+    }
+
+    else if(g.status==='reveal'){
+      const q = g.questions[g.currentIndex];
+      const answersForQ = S.answersDocs.filter(a=>a.qIndex===g.currentIndex);
+      const card = el('<div class="card"></div>');
+      card.appendChild(el('<div class="qn-tag">ผลคำถามที่ '+(g.currentIndex+1)+'</div>'));
+      card.appendChild(el('<div class="question-text">'+esc(q.text)+'</div>'));
+      const bars = el('<div class="bars"></div>');
+      const total = answersForQ.length||1;
+      q.choices.forEach((c,ci)=>{
+        const count = answersForQ.filter(a=>a.choiceIndex===ci).length;
+        const pct = Math.round(count/total*100);
+        const isCorrect = ci===q.correctIndex;
+        const row = el('<div class="bar-row'+(isCorrect?' is-correct':'')+'"></div>');
+        row.appendChild(el('<div class="bar-shape shape-'+ci+'">'+SHAPES[ci]+'</div>'));
+        const track = el('<div class="bar-track"></div>');
+        track.appendChild(el('<div class="bar-fill shape-'+ci+'" style="width:'+pct+'%;"></div>'));
+        row.appendChild(track);
+        row.appendChild(el('<div class="bar-count">'+count+'</div>'));
+        bars.appendChild(row);
+      });
+      card.appendChild(bars);
+      card.appendChild(el('<p class="muted">✅ คำตอบที่ถูกคือ: <b style="color:var(--ok);">'+esc(q.choices[q.correctIndex])+'</b></p>'));
+      app.appendChild(card);
+
+      const lbCard = el('<div class="card"></div>');
+      lbCard.appendChild(el('<h3 style="margin:0 0 10px;">อันดับคะแนน</h3>'));
+      const rows = scoreboard();
+      rows.slice(0,8).forEach((r,i)=>{
+        const row = el('<div class="lb-row"></div>');
+        row.appendChild(el('<div class="lb-rank">#'+(i+1)+'</div>'));
+        row.appendChild(el('<div class="lb-name">'+esc(r.name)+'</div>'));
+        row.appendChild(el('<div class="lb-score">'+r.score+'</div>'));
+        lbCard.appendChild(row);
+      });
+      app.appendChild(lbCard);
+
+      const nextBtn = el('<button class="btn btn-primary btn-block btn-lg" style="margin-top:14px;">'+((g.currentIndex+1>=g.questions.length)?'🏁 จบเกม ดูผลสรุป':'คำถามต่อไป →')+'</button>');
+      nextBtn.addEventListener('click', nextQuestion);
+      app.appendChild(nextBtn);
+    }
+
+    else if(g.status==='ended'){ app.appendChild(renderEndedBlock()); }
+    renderTopbar();
+  }
+
+  function renderPlayerPlay(){
+    const app = document.getElementById('app'); app.innerHTML='';
+    if(!S.game){ app.appendChild(el('<div class="card center-text muted">กำลังโหลด...</div>')); renderTopbar(); return; }
+    const g = S.game;
+
+    if(g.status==='lobby'){
+      const card = el('<div class="card center-text"></div>');
+      card.appendChild(el('<h2 style="margin:0 0 6px;">'+esc(g.title)+'</h2>'));
+      card.appendChild(el('<p class="muted">สวัสดี '+esc(S.playerName)+' 👋</p>'));
+      card.appendChild(el('<div style="font-size:40px;margin:18px 0;">⏳</div>'));
+      card.appendChild(el('<p class="muted">รอเจ้าของเกมเริ่มเกม...</p>'));
+      app.appendChild(card);
+    }
+
+    else if(g.status==='question'){
+      const q = g.questions[g.currentIndex];
+      const {pct, secsLeft} = timerFillStyle(q, g.questionStartedAt);
+      const card = el('<div class="card"></div>');
+      card.appendChild(el('<div class="qn-tag">คำถามที่ '+(g.currentIndex+1)+' / '+g.questions.length+'</div>'));
+      card.appendChild(el('<div class="question-text">'+esc(q.text)+'</div>'));
+      card.appendChild(el('<div class="timerbar"><div class="timerbar-fill" style="width:'+pct+'%;"></div></div>'));
+      card.appendChild(el('<div class="timer-label"><span>⏱ เหลือ '+secsLeft+' วิ</span><span></span></div>'));
+
+      if(S.myLastAnswer){
+        const grid = el('<div class="answers-grid"></div>');
+        q.choices.forEach((c,ci)=>{
+          const picked = S.myLastAnswer.choiceIndex===ci;
+          grid.appendChild(el('<div class="answer-tile at-'+ci+(picked?' picked':' dim')+'"><div class="shape">'+SHAPES[ci]+'</div><div>'+esc(c)+'</div></div>'));
+        });
+        card.appendChild(grid);
+        card.appendChild(el('<p class="muted center-text" style="margin-top:14px;">✅ ส่งคำตอบแล้ว รอผู้เล่นคนอื่น...</p>'));
+      } else {
+        const grid = el('<div class="answers-grid"></div>');
+        q.choices.forEach((c,ci)=>{
+          const tile = document.createElement('button');
+          tile.className='answer-tile at-'+ci;
+          tile.innerHTML = '<div class="shape">'+SHAPES[ci]+'</div><div>'+esc(c)+'</div>';
+          tile.addEventListener('click', ()=>submitAnswer(ci));
+          grid.appendChild(tile);
+        });
+        card.appendChild(grid);
+      }
+      app.appendChild(card);
+    }
+
+    else if(g.status==='reveal'){
+      const q = g.questions[g.currentIndex];
+      const mine = S.myLastAnswer;
+      const card = el('<div class="card"></div>');
+      if(mine){
+        const good = mine.correct;
+        card.appendChild(el('<div class="feedback-badge '+(good?'good':'bad')+'"><div class="big">'+(good?'🎉 ถูกต้อง!':'❌ พลาดไป')+'</div><div class="pts">+'+mine.points+' คะแนน</div></div>'));
+      } else {
+        card.appendChild(el('<div class="feedback-badge bad"><div class="big">⏱ หมดเวลา</div><div class="pts">ไม่ได้ตอบคำถามนี้</div></div>'));
+      }
+      card.appendChild(el('<p class="muted">คำตอบที่ถูก: <b style="color:var(--ok);">'+esc(q.choices[q.correctIndex])+'</b></p>'));
+      const rows = scoreboard();
+      const myRank = rows.findIndex(r=>r.id===S.playerId)+1;
+      const myScore = rows.find(r=>r.id===S.playerId);
+      card.appendChild(el('<p style="margin-top:14px;">อันดับของคุณ: <b>#'+(myRank||'-')+'</b> · คะแนนรวม <b>'+(myScore?myScore.score:0)+'</b></p>'));
+      app.appendChild(card);
+      const lbCard = el('<div class="card"></div>');
+      lbCard.appendChild(el('<h3 style="margin:0 0 10px;">อันดับคะแนน</h3>'));
+      rows.slice(0,8).forEach((r,i)=>{
+        const row = el('<div class="lb-row'+(r.id===S.playerId?' me':'')+'"></div>');
+        row.appendChild(el('<div class="lb-rank">#'+(i+1)+'</div>'));
+        row.appendChild(el('<div class="lb-name">'+esc(r.name)+'</div>'));
+        row.appendChild(el('<div class="lb-score">'+r.score+'</div>'));
+        lbCard.appendChild(row);
+      });
+      app.appendChild(lbCard);
+      app.appendChild(el('<p class="muted center-text" style="margin-top:10px;">รอคำถามต่อไป...</p>'));
+    }
+
+    else if(g.status==='ended'){ app.appendChild(renderEndedBlock()); }
+    renderTopbar();
+  }
+
+  function renderEndedBlock(){
+    const wrap = document.createElement('div');
+    const rows = scoreboard();
+    const card = el('<div class="card center-text"></div>');
+    card.appendChild(el('<h2 style="margin:0 0 4px;">🏆 จบเกม!</h2>'));
+    card.appendChild(el('<p class="muted" style="margin:0 0 6px;">'+esc(S.game.title)+'</p>'));
+    const podium = el('<div class="podium"></div>');
+    [1,0,2].forEach(pos=>{
+      const r = rows[pos]; if(!r) return;
+      const col = el('<div class="podium-col podium-'+(pos+1)+'"></div>');
+      col.appendChild(el('<div class="podium-block">#'+(pos+1)+'</div>'));
+      col.appendChild(el('<div class="podium-name">'+esc(r.name)+'</div>'));
+      col.appendChild(el('<div class="podium-score">'+r.score+' คะแนน</div>'));
+      podium.appendChild(col);
+    });
+    card.appendChild(podium);
+    wrap.appendChild(card);
+
+    const lbCard = el('<div class="card" style="margin-top:14px;"></div>');
+    lbCard.appendChild(el('<h3 style="margin:0 0 10px;">อันดับทั้งหมด</h3>'));
+    rows.forEach((r,i)=>{
+      const row = el('<div class="lb-row'+(r.id===S.playerId?' me':'')+'"></div>');
+      row.appendChild(el('<div class="lb-rank">#'+(i+1)+'</div>'));
+      row.appendChild(el('<div class="lb-name">'+esc(r.name)+'</div>'));
+      row.appendChild(el('<div class="lb-score">'+r.score+'</div>'));
+      lbCard.appendChild(row);
+    });
+    wrap.appendChild(lbCard);
+
+    const homeBtn = el('<button class="btn btn-primary btn-block btn-lg" style="margin-top:16px;">🏠 กลับหน้าแรก</button>');
+    homeBtn.addEventListener('click', goHome);
+    wrap.appendChild(homeBtn);
+    return wrap;
+  }
+
+  // ================= HOME =================
+  function renderHome(){
+    const app = document.getElementById('app'); app.innerHTML='';
+    const col = el('<div class="center-col"></div>');
+    col.appendChild(el('<div><div class="hero-title">Quiz <span class="accent-text">Arena</span></div><p class="hero-sub">สร้างห้องควิซของคุณเอง แชร์รหัสให้เพื่อน แล้วแข่งตอบคำถามสดพร้อมกันได้เลย ไม่ต้องมีบัญชีใดๆ</p></div>'));
+
+    if(S.dbState==='unavailable'){
+      col.appendChild(el('<div class="warn-banner">ยังไม่ได้ตั้งค่า Firebase — แก้ไฟล์ firebase-config.js ให้ใส่ค่าโปรเจกต์ Firebase ของคุณก่อนใช้งาน</div>'));
+    }
+
+    const choices = el('<div class="home-choices"></div>');
+    const hostCard = el('<div class="choice-card"><span class="emoji">🎮</span><div><b>เป็นเจ้าของเกม</b><span>สร้างคำถามและควบคุมเกม</span></div></div>');
+    hostCard.addEventListener('click', ()=>{ S.screen='host-setup'; render(); });
+    const joinCard = el('<div class="choice-card"><span class="emoji">📱</span><div><b>เข้าร่วมเกม</b><span>ใส่รหัสห้องเพื่อเล่น</span></div></div>');
+    joinCard.addEventListener('click', ()=>{ S.screen='join'; render(); });
+    choices.appendChild(hostCard); choices.appendChild(joinCard);
+    col.appendChild(choices);
+
+    app.appendChild(col);
+    app.appendChild(el('<div class="footer-note">Quiz Arena · เล่นฟรี ไม่ต้องล็อกอิน</div>'));
+    renderTopbar();
+  }
+
+  // ================= MASTER RENDER =================
+  function render(){
+    switch(S.screen){
+      case 'home': renderHome(); break;
+      case 'host-setup': renderHostSetup(); break;
+      case 'host-play': renderHostPlay(); break;
+      case 'join': renderJoin(); break;
+      case 'player-play': renderPlayerPlay(); break;
+      default: renderHome();
+    }
+  }
+
+  render();
+  initDb();
+})();
+</script>
+</body>
+</html>
