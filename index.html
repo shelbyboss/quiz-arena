@@ -189,7 +189,6 @@
 <!-- Firebase (client SDK, config below is public by design — protected by Firestore rules, not secrecy) -->
 <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-storage-compat.js"></script>
 <script src="firebase-config.js"></script>
 
 <script>
@@ -231,47 +230,10 @@
     return el('<img class="q-image" src="'+esc(q.imageUrl.trim())+'" alt="" loading="lazy">');
   }
 
-  function resizeImageFile(file, maxDim, quality){
-    return new Promise((resolve, reject)=>{
-      const reader = new FileReader();
-      reader.onerror = ()=>reject(new Error('read_failed'));
-      reader.onload = (e)=>{
-        const img = new Image();
-        img.onerror = ()=>reject(new Error('decode_failed'));
-        img.onload = ()=>{
-          let w=img.width, h=img.height;
-          if(w>maxDim || h>maxDim){ const scale=Math.min(maxDim/w, maxDim/h); w=Math.round(w*scale); h=Math.round(h*scale); }
-          const canvas = document.createElement('canvas');
-          canvas.width=w; canvas.height=h;
-          canvas.getContext('2d').drawImage(img,0,0,w,h);
-          canvas.toBlob(blob=>{ blob ? resolve(blob) : reject(new Error('encode_failed')); }, 'image/jpeg', quality);
-        };
-        img.src = e.target.result;
-      };
-      reader.readAsDataURL(file);
-    });
-  }
-
-  async function uploadQuestionImage(q, file, onStatus){
-    if(!S.storage){ onStatus('อัปโหลดไม่ได้ (ยังไม่ได้เปิด Firebase Storage) — วางลิงก์รูปแทนได้'); return; }
-    try{
-      onStatus('กำลังอัปโหลด...');
-      const blob = await resizeImageFile(file, 1000, 0.82);
-      const path = 'quiz-images/'+Date.now()+'_'+Math.random().toString(36).slice(2)+'.jpg';
-      const ref = S.storage.ref().child(path);
-      await ref.put(blob, {contentType:'image/jpeg'});
-      const url = await ref.getDownloadURL();
-      q.imageUrl = url;
-      onStatus('');
-    }catch(e){
-      console.error(e);
-      onStatus('อัปโหลดไม่สำเร็จ ลองใหม่ หรือวางลิงก์รูปแทน');
-    }
-  }
 
   // ---------- global state ----------
   const S = {
-    screen:'home', dbState:'loading', db:null, storage:null,
+    screen:'home', dbState:'loading', db:null,
     playerId:getPlayerId(), playerName:lsGet('qa_name',''),
     code:null, isHost:false, quizTitle:'', questions:[],
     game:null, playersDocs:[], answersDocs:[],
@@ -307,7 +269,6 @@
       }
       firebase.initializeApp(window.__FIREBASE_CONFIG__);
       S.db = firebase.firestore();
-      try{ S.storage = firebase.storage(); }catch(e){ S.storage=null; }
       S.dbState='ready';
       maybeAutoJoinFromUrl();
       render();
@@ -399,27 +360,11 @@
           imgField.appendChild(preview);
         }
 
-        const uploadRow = el('<div class="upload-row"></div>');
-        const fileInput = document.createElement('input');
-        fileInput.type='file'; fileInput.accept='image/*';
-        const statusSpan = el('<span class="upload-status"></span>');
-        fileInput.addEventListener('change', ()=>{
-          const file = fileInput.files && fileInput.files[0];
-          if(!file) return;
-          uploadQuestionImage(q, file, (msg)=>{
-            statusSpan.textContent = msg;
-            if(!msg) renderQuestionCards();
-          });
-        });
-        uploadRow.appendChild(fileInput);
-        uploadRow.appendChild(statusSpan);
-        imgField.appendChild(uploadRow);
-
         const imgInput = document.createElement('input');
-        imgInput.type='text'; imgInput.placeholder='หรือวางลิงก์รูปภาพ (URL)'; imgInput.value=q.imageUrl;
-        imgInput.style.marginTop='6px';
+        imgInput.type='text'; imgInput.placeholder='วางลิงก์รูปภาพ (URL) เช่น https://...'; imgInput.value=q.imageUrl;
         imgInput.addEventListener('input', ()=>{ q.imageUrl=imgInput.value; });
         imgField.appendChild(imgInput);
+        imgField.appendChild(el('<div class="muted" style="font-size:12px;margin-top:6px;">ไม่มีลิงก์รูป? อัปโหลดรูปที่ <a href="https://imgur.com/upload" target="_blank" rel="noopener">imgur.com/upload</a> ก่อน (ไม่ต้องสมัครสมาชิก) แล้วคัดลอกลิงก์รูปมาวางตรงนี้</div>'));
         qc.appendChild(imgField);
 
         if(!q.mode) q.mode='four';
