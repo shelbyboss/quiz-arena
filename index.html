@@ -104,6 +104,13 @@
   .correct-radio{width:20px;height:20px;flex:none;accent-color:var(--ok);}
   .timelimit-row{display:flex;align-items:center;gap:10px;margin-top:10px;font-size:13px;color:var(--text-dim);}
   .timelimit-row input[type=range]{flex:1;accent-color:var(--accent);}
+  .sets-box{background:var(--surface-2);border:1px solid var(--surface-3);border-radius:var(--radius-md);padding:12px;margin-bottom:16px;}
+  .sets-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;}
+  .sets-list{display:flex;flex-direction:column;gap:6px;max-height:180px;overflow-y:auto;}
+  .set-row{display:flex;align-items:center;gap:8px;background:var(--surface);border-radius:var(--radius-sm);padding:8px 10px;}
+  .set-name{flex:1;min-width:0;display:flex;flex-direction:column;font-size:14px;}
+  .set-name b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .set-name span{font-size:12px;color:var(--text-dim);}
   .mode-toggle{display:flex;gap:6px;margin:10px 0 4px;}
   .mode-btn{flex:1;padding:8px 10px;border-radius:999px;border:1px solid var(--surface-3);background:var(--surface);color:var(--text-dim);font-size:12px;font-weight:600;cursor:pointer;font-family:'Kanit';}
   .mode-btn.active{background:var(--accent);border-color:var(--accent);color:#fff;}
@@ -417,6 +424,30 @@
     return null;
   }
 
+  function getQuizSets(){
+    try{
+      const arr = JSON.parse(lsGet('qa_sets','[]'));
+      return Array.isArray(arr) ? arr : [];
+    }catch(e){ return []; }
+  }
+  function putQuizSets(sets){
+    try{ localStorage.setItem('qa_sets', JSON.stringify(sets)); return true; }
+    catch(e){ return false; }
+  }
+  function saveQuizSet(){
+    const name = (prompt('ตั้งชื่อชุดคำถามนี้', S.quizTitle || '') || '').trim();
+    if(!name) return false;
+    const sets = getQuizSets();
+    const idx = sets.findIndex(s=>s.name===name);
+    if(idx>=0 && !confirm('มีชุดชื่อ "'+name+'" อยู่แล้ว เขียนทับไหม?')) return false;
+    const entry = { id: idx>=0 ? sets[idx].id : 's_'+Date.now(), name, savedAt:Date.now(),
+      title:S.quizTitle, autoAdvance:S.autoAdvance, questions:JSON.parse(JSON.stringify(S.questions)) };
+    if(idx>=0) sets[idx]=entry; else sets.unshift(entry);
+    if(!putQuizSets(sets)){ alert('บันทึกไม่สำเร็จ พื้นที่เก็บข้อมูลในเบราว์เซอร์เต็ม (อาจเพราะมีรูปเยอะ) ลองลบชุดเก่าที่ไม่ใช้ก่อน'); return false; }
+    saveTemplate();
+    return true;
+  }
+
   function renderHostSetup(){
     if(S.questions.length===0){
       const saved = loadTemplate();
@@ -433,6 +464,42 @@
     const card = el('<div class="card"></div>');
     card.appendChild(el('<h2 style="margin:0 0 4px;">ตั้งค่าเกม</h2>'));
     card.appendChild(el('<p class="muted" style="margin:0 0 16px;">ตั้งชื่อเกมและใส่คำถาม จากนั้นกด "สร้างห้อง"</p>'));
+
+    const sets = getQuizSets();
+    if(sets.length){
+      const setsBox = el('<div class="sets-box"></div>');
+      const head = el('<div class="sets-head"><label style="margin:0;">ชุดคำถามที่บันทึกไว้ ('+sets.length+')</label></div>');
+      const newBtn = el('<button type="button" class="icon-btn" style="color:var(--accent-2);">+ เริ่มชุดใหม่</button>');
+      newBtn.addEventListener('click', ()=>{
+        if(!confirm('เริ่มชุดใหม่? ข้อมูลที่กำลังแก้อยู่ตอนนี้จะหายถ้ายังไม่ได้บันทึก')) return;
+        S.quizTitle=''; S.autoAdvance=false; S.questions=exampleQuestions();
+        renderHostSetup();
+      });
+      head.appendChild(newBtn);
+      setsBox.appendChild(head);
+      const list = el('<div class="sets-list"></div>');
+      sets.forEach(s=>{
+        const row = el('<div class="set-row"></div>');
+        row.appendChild(el('<div class="set-name"><b>'+esc(s.name)+'</b><span>'+s.questions.length+' ข้อ</span></div>'));
+        const loadBtn = el('<button type="button" class="mode-btn" style="flex:none;padding:6px 14px;">โหลด</button>');
+        loadBtn.addEventListener('click', ()=>{
+          S.quizTitle = s.title || s.name;
+          S.autoAdvance = !!s.autoAdvance;
+          S.questions = JSON.parse(JSON.stringify(s.questions));
+          renderHostSetup();
+        });
+        const delBtn = el('<button type="button" class="icon-btn" title="ลบชุดนี้">🗑</button>');
+        delBtn.addEventListener('click', ()=>{
+          if(!confirm('ลบชุด "'+s.name+'" ถาวร?')) return;
+          putQuizSets(getQuizSets().filter(x=>x.id!==s.id));
+          renderHostSetup();
+        });
+        row.appendChild(loadBtn); row.appendChild(delBtn);
+        list.appendChild(row);
+      });
+      setsBox.appendChild(list);
+      card.appendChild(setsBox);
+    }
 
     const titleField = el('<div class="field"><label>ชื่อเกม</label></div>');
     const titleInput = document.createElement('input');
@@ -590,12 +657,10 @@
 
     app.appendChild(card);
 
-    const saveBtn = el('<button class="btn btn-secondary btn-block">💾 บันทึกแบบร่าง</button>');
+    const saveBtn = el('<button class="btn btn-secondary btn-block">💾 บันทึกเป็นชุดคำถาม</button>');
     saveBtn.addEventListener('click', ()=>{
-      saveTemplate();
-      const original = saveBtn.textContent;
-      saveBtn.textContent = 'บันทึกแล้ว ✓';
-      setTimeout(()=>{ saveBtn.textContent = original; }, 1500);
+      if(!saveQuizSet()) return;
+      renderHostSetup();
     });
     app.appendChild(saveBtn);
 
