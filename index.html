@@ -255,37 +255,59 @@
   const REVEAL_TOTAL = REVEAL_COLS * REVEAL_ROWS;
   const REVEAL_ORDER = [11,3,17,0,14,8,2,19,6,15,1,10,18,4,12,7,16,9,5,13];
 
-  function questionImageEl(q, revealFrac){
+  // Builds the image DOM ONCE (per real render); applyImageReveal() then updates it live
+  // on each timer tick without touching the rest of the screen, so nothing flickers/reloads.
+  function buildQuestionImage(q){
     if(!q || !q.imageUrl || !q.imageUrl.trim()) return null;
     const mode = q.revealMode || 'blur';
-
-    if(mode==='full'){
-      return el('<img class="q-image" src="'+esc(q.imageUrl.trim())+'" alt="" loading="lazy">');
-    }
-
-    const revealing = revealFrac!==undefined && revealFrac<1;
+    const img = el('<img class="q-image" src="'+esc(q.imageUrl.trim())+'" alt="" loading="lazy">');
 
     if(mode==='tiles'){
       const wrap = el('<div class="q-image-wrap"></div>');
-      wrap.appendChild(el('<img class="q-image" src="'+esc(q.imageUrl.trim())+'" alt="" loading="lazy">'));
-      if(revealing){
-        const grid = el('<div class="reveal-grid" style="grid-template-columns:repeat('+REVEAL_COLS+',1fr);grid-template-rows:repeat('+REVEAL_ROWS+',1fr);"></div>');
-        const revealCount = Math.max(0, Math.floor(revealFrac * REVEAL_TOTAL));
-        const revealedSet = new Set(REVEAL_ORDER.slice(0, revealCount));
-        for(let i=0;i<REVEAL_TOTAL;i++){
-          grid.appendChild(el('<div class="reveal-tile'+(revealedSet.has(i)?' revealed':'')+'"></div>'));
-        }
-        wrap.appendChild(grid);
+      wrap.appendChild(img);
+      const grid = el('<div class="reveal-grid" style="grid-template-columns:repeat('+REVEAL_COLS+',1fr);grid-template-rows:repeat('+REVEAL_ROWS+',1fr);"></div>');
+      const tileEls = [];
+      for(let i=0;i<REVEAL_TOTAL;i++){
+        const tile = el('<div class="reveal-tile"></div>');
+        tileEls.push(tile);
+        grid.appendChild(tile);
       }
-      return wrap;
+      wrap.appendChild(grid);
+      return { el:wrap, mode, img, tileEls };
     }
 
-    const img = el('<img class="q-image" src="'+esc(q.imageUrl.trim())+'" alt="" loading="lazy">');
-    if(revealing){
+    return { el:img, mode, img };
+  }
+
+  function applyImageReveal(ref, revealFrac){
+    if(!ref) return;
+    const revealing = revealFrac!==undefined && revealFrac<1;
+    if(ref.mode==='tiles'){
+      if(!revealing){ ref.tileEls.forEach(t=>t.classList.add('revealed')); return; }
+      const revealCount = Math.max(0, Math.floor(revealFrac * REVEAL_TOTAL));
+      const revealedSet = new Set(REVEAL_ORDER.slice(0, revealCount));
+      ref.tileEls.forEach((t,i)=>{ t.classList.toggle('revealed', revealedSet.has(i)); });
+    } else if(ref.mode==='blur'){
+      if(!revealing){ ref.img.style.filter=''; return; }
       const blurPx = Math.round((1-revealFrac) * 18);
-      if(blurPx>0) img.style.filter = 'blur('+blurPx+'px)';
+      ref.img.style.filter = blurPx>0 ? 'blur('+blurPx+'px)' : '';
     }
-    return img;
+  }
+
+  // Lightweight per-tick updater (250ms) — updates only the timer bar, countdown
+  // text, and image reveal in place, instead of rebuilding the whole screen.
+  function updateTick(){
+    const t = S.tickTargets;
+    if(!t) return;
+    if(t.kind==='question'){
+      const {pct, secsLeft} = timerFillStyle(t.q, t.startedAt);
+      if(t.timerFill) t.timerFill.style.width = pct+'%';
+      if(t.secsLabel) t.secsLabel.textContent = '⏱ เหลือ '+secsLeft+' วิ';
+      if(t.imgRef) applyImageReveal(t.imgRef, 1-pct/100);
+    } else if(t.kind==='reveal'){
+      const remain = Math.max(0, 5000 - (Date.now()-(t.startedAt||Date.now())));
+      if(t.countEl) t.countEl.textContent = ' ('+Math.ceil(remain/1000)+')';
+    }
   }
 
   function fileToCompressedDataUrl(file, maxDim, quality){
@@ -314,7 +336,7 @@
   const S = {
     screen:'home', dbState:'loading', db:null,
     playerId:getPlayerId(), playerName:lsGet('qa_name',''),
-    code:null, isHost:false, quizTitle:'', questions:[],
+    code:null, isHost:false, quizTitle:'', questions:[], autoAdvance:false, tickTargets:null,
     game:null, playersDocs:[], answersDocs:[],
     joinCodeInput:'', joinNameInput:lsGet('qa_name',''), joinError:'',
     avatarEmoji:lsGet('qa_avatar_emoji','😀'), avatarColor:lsGet('qa_avatar_color','#7C5CFF'),
@@ -326,6 +348,7 @@
     S.subs=[];
     if(S.questionTimer){ clearTimeout(S.questionTimer); S.questionTimer=null; }
     if(S.tickTimer){ clearInterval(S.tickTimer); S.tickTimer=null; }
+    S.tickTargets = null;
   }
 
   function goHome(){
@@ -384,7 +407,7 @@
 
   // ================= HOST: SETUP =================
   function saveTemplate(){
-    try{ lsSet('qa_template', JSON.stringify({ title:S.quizTitle, questions:S.questions })); }catch(e){}
+    try{ lsSet('qa_template', JSON.stringify({ title:S.quizTitle, questions:S.questions, autoAdvance:S.autoAdvance })); }catch(e){}
   }
   function loadTemplate(){
     try{
@@ -400,6 +423,7 @@
       if(saved && Array.isArray(saved.questions) && saved.questions.length){
         S.questions = saved.questions;
         if(!S.quizTitle) S.quizTitle = saved.title || '';
+        if(saved.autoAdvance!==undefined) S.autoAdvance = saved.autoAdvance;
       } else {
         S.questions = exampleQuestions();
       }
@@ -416,6 +440,16 @@
     titleInput.addEventListener('input', ()=>{ S.quizTitle = titleInput.value; });
     titleField.appendChild(titleInput);
     card.appendChild(titleField);
+
+    const advField = el('<div class="field"><label>เปลี่ยนคำถามถัดไป</label></div>');
+    const advRow = el('<div class="mode-toggle"></div>');
+    const manualBtn = el('<button type="button" class="mode-btn'+(!S.autoAdvance?' active':'')+'">กดเอง</button>');
+    const autoBtn = el('<button type="button" class="mode-btn'+(S.autoAdvance?' active':'')+'">อัตโนมัติ (5 วิ)</button>');
+    manualBtn.addEventListener('click', ()=>{ S.autoAdvance=false; renderHostSetup(); });
+    autoBtn.addEventListener('click', ()=>{ S.autoAdvance=true; renderHostSetup(); });
+    advRow.appendChild(manualBtn); advRow.appendChild(autoBtn);
+    advField.appendChild(advRow);
+    card.appendChild(advField);
 
     const qList = document.createElement('div');
     qList.id='qList';
@@ -600,7 +634,7 @@
     if(!code){ alert('สร้างห้องไม่สำเร็จ ลองอีกครั้ง'); return; }
     const gameData = {
       title: S.quizTitle || 'ควิซไม่มีชื่อ',
-      status:'lobby', currentIndex:0, questionStartedAt:null,
+      status:'lobby', currentIndex:0, questionStartedAt:null, revealStartedAt:null, autoAdvance:!!S.autoAdvance,
       questions: S.questions.map(q=>({ text:q.text, choices: q.mode==='two' ? q.choices.slice(0,2) : q.choices, correctIndex:q.correctIndex, timeLimitSec:q.timeLimitSec, imageUrl:(q.imageUrl||'').trim(), revealMode:q.revealMode||'blur' })),
       createdAt: Date.now(),
     };
@@ -642,12 +676,18 @@
         const limitMs = (q.timeLimitSec||20)*1000;
         const remaining = limitMs - (Date.now() - (S.game.questionStartedAt||Date.now()));
         S.questionTimer = setTimeout(()=>{ revealCurrent(); }, Math.max(300, remaining+250));
+      } else if(S.game.status==='reveal' && S.game.autoAdvance){
+        if(S.questionTimer) clearTimeout(S.questionTimer);
+        const remaining = 5000 - (Date.now() - (S.game.revealStartedAt||Date.now()));
+        S.questionTimer = setTimeout(()=>{ nextQuestion(); }, Math.max(300, remaining+250));
       } else if(S.questionTimer){
         clearTimeout(S.questionTimer); S.questionTimer=null;
       }
     }
     if(S.tickTimer){ clearInterval(S.tickTimer); S.tickTimer=null; }
-    if(S.game.status==='question'){ S.tickTimer = setInterval(render, 250); }
+    if(S.game.status==='question' || (S.game.status==='reveal' && S.game.autoAdvance)){
+      S.tickTimer = setInterval(updateTick, 250);
+    }
   }
 
   // ================= HOST controls =================
@@ -656,7 +696,7 @@
   }
   async function revealCurrent(){
     if(!S.game || S.game.status!=='question') return;
-    await S.db.doc('games/'+S.code).update({ status:'reveal' });
+    await S.db.doc('games/'+S.code).update({ status:'reveal', revealStartedAt:Date.now() });
   }
   async function nextQuestion(){
     const nextIdx = S.game.currentIndex+1;
@@ -816,10 +856,16 @@
       const {pct, secsLeft} = timerFillStyle(q, g.questionStartedAt);
       const card = el('<div class="card"></div>');
       card.appendChild(el('<div class="qn-tag">คำถามที่ '+(g.currentIndex+1)+' / '+g.questions.length+'</div>'));
-      const qImgHost = questionImageEl(q, 1-pct/100); if(qImgHost) card.appendChild(qImgHost);
+      const imgRef = buildQuestionImage(q);
+      if(imgRef){ applyImageReveal(imgRef, 1-pct/100); card.appendChild(imgRef.el); }
       card.appendChild(el('<div class="question-text">'+esc(q.text)+'</div>'));
-      card.appendChild(el('<div class="timerbar"><div class="timerbar-fill" style="width:'+pct+'%;"></div></div>'));
-      card.appendChild(el('<div class="timer-label"><span>⏱ เหลือ '+secsLeft+' วิ</span><span>ตอบแล้ว '+S.answersDocs.filter(a=>a.qIndex===g.currentIndex).length+'/'+S.playersDocs.length+' คน</span></div>'));
+      const timerFillEl = el('<div class="timerbar-fill" style="width:'+pct+'%;"></div>');
+      const timerBarEl = el('<div class="timerbar"></div>'); timerBarEl.appendChild(timerFillEl);
+      card.appendChild(timerBarEl);
+      const secsLabelEl = el('<span>⏱ เหลือ '+secsLeft+' วิ</span>');
+      const answeredLabelEl = el('<span>ตอบแล้ว '+S.answersDocs.filter(a=>a.qIndex===g.currentIndex).length+'/'+S.playersDocs.length+' คน</span>');
+      const timerLabelEl = el('<div class="timer-label"></div>'); timerLabelEl.appendChild(secsLabelEl); timerLabelEl.appendChild(answeredLabelEl);
+      card.appendChild(timerLabelEl);
       const grid = el('<div class="answers-grid"></div>');
       q.choices.forEach((c,ci)=>{ grid.appendChild(el('<div class="answer-tile at-'+ci+'"><div class="shape">'+SHAPES[ci]+'</div><div>'+esc(c)+'</div></div>')); });
       card.appendChild(grid);
@@ -827,6 +873,7 @@
       const revealBtn = el('<button class="btn btn-secondary btn-block" style="margin-top:14px;">ดูผลลัพธ์ตอนนี้ →</button>');
       revealBtn.addEventListener('click', revealCurrent);
       app.appendChild(revealBtn);
+      S.tickTargets = { kind:'question', timerFill:timerFillEl, secsLabel:secsLabelEl, imgRef, q, startedAt:g.questionStartedAt };
     }
 
     else if(g.status==='reveal'){
@@ -834,7 +881,8 @@
       const answersForQ = S.answersDocs.filter(a=>a.qIndex===g.currentIndex);
       const card = el('<div class="card"></div>');
       card.appendChild(el('<div class="qn-tag">ผลคำถามที่ '+(g.currentIndex+1)+'</div>'));
-      const qImgReveal = questionImageEl(q); if(qImgReveal) card.appendChild(qImgReveal);
+      const imgRefReveal = buildQuestionImage(q);
+      if(imgRefReveal){ applyImageReveal(imgRefReveal, undefined); card.appendChild(imgRefReveal.el); }
       card.appendChild(el('<div class="question-text">'+esc(q.text)+'</div>'));
       const bars = el('<div class="bars"></div>');
       const total = answersForQ.length||1;
@@ -867,9 +915,17 @@
       });
       app.appendChild(lbCard);
 
-      const nextBtn = el('<button class="btn btn-primary btn-block btn-lg" style="margin-top:14px;">'+((g.currentIndex+1>=g.questions.length)?'🏁 จบเกม ดูผลสรุป':'คำถามต่อไป →')+'</button>');
+      const isLast = g.currentIndex+1>=g.questions.length;
+      const nextBtn = el('<button class="btn btn-primary btn-block btn-lg" style="margin-top:14px;"></button>');
+      nextBtn.appendChild(document.createTextNode(isLast?'🏁 จบเกม ดูผลสรุป':'คำถามต่อไป →'));
       nextBtn.addEventListener('click', nextQuestion);
       app.appendChild(nextBtn);
+      if(g.autoAdvance){
+        const countEl = el('<span></span>');
+        nextBtn.appendChild(countEl);
+        S.tickTargets = { kind:'reveal', countEl, startedAt:g.revealStartedAt };
+        updateTick();
+      }
     }
 
     else if(g.status==='ended'){ app.appendChild(renderEndedBlock()); }
@@ -895,10 +951,16 @@
       const {pct, secsLeft} = timerFillStyle(q, g.questionStartedAt);
       const card = el('<div class="card"></div>');
       card.appendChild(el('<div class="qn-tag">คำถามที่ '+(g.currentIndex+1)+' / '+g.questions.length+'</div>'));
-      const qImgPlayer = questionImageEl(q, 1-pct/100); if(qImgPlayer) card.appendChild(qImgPlayer);
+      const imgRef = buildQuestionImage(q);
+      if(imgRef){ applyImageReveal(imgRef, 1-pct/100); card.appendChild(imgRef.el); }
       card.appendChild(el('<div class="question-text">'+esc(q.text)+'</div>'));
-      card.appendChild(el('<div class="timerbar"><div class="timerbar-fill" style="width:'+pct+'%;"></div></div>'));
-      card.appendChild(el('<div class="timer-label"><span>⏱ เหลือ '+secsLeft+' วิ</span><span></span></div>'));
+      const timerFillEl = el('<div class="timerbar-fill" style="width:'+pct+'%;"></div>');
+      const timerBarEl = el('<div class="timerbar"></div>'); timerBarEl.appendChild(timerFillEl);
+      card.appendChild(timerBarEl);
+      const secsLabelEl = el('<span>⏱ เหลือ '+secsLeft+' วิ</span>');
+      const timerLabelEl = el('<div class="timer-label"></div>'); timerLabelEl.appendChild(secsLabelEl); timerLabelEl.appendChild(el('<span></span>'));
+      card.appendChild(timerLabelEl);
+      S.tickTargets = { kind:'question', timerFill:timerFillEl, secsLabel:secsLabelEl, imgRef, q, startedAt:g.questionStartedAt };
 
       if(S.myLastAnswer){
         const grid = el('<div class="answers-grid"></div>');
@@ -949,7 +1011,14 @@
         lbCard.appendChild(row);
       });
       app.appendChild(lbCard);
-      app.appendChild(el('<p class="muted center-text" style="margin-top:10px;">รอคำถามต่อไป...</p>'));
+      const waitEl = el('<p class="muted center-text" style="margin-top:10px;">รอคำถามต่อไป...</p>');
+      app.appendChild(waitEl);
+      if(g.autoAdvance){
+        const countEl = el('<span></span>');
+        waitEl.appendChild(countEl);
+        S.tickTargets = { kind:'reveal', countEl, startedAt:g.revealStartedAt };
+        updateTick();
+      }
     }
 
     else if(g.status==='ended'){ app.appendChild(renderEndedBlock()); }
