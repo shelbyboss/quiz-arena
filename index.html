@@ -634,6 +634,7 @@
 
   function onGameChanged(){
     if(!S.game) return;
+    S.myLastAnswer = S.answersDocs.find(a=> a.playerId===S.playerId && a.qIndex===S.game.currentIndex) || null;
     if(S.isHost){
       if(S.game.status==='question'){
         if(S.questionTimer) clearTimeout(S.questionTimer);
