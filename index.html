@@ -391,6 +391,12 @@
     { root:87.31,  arp:[349.23,440,523.25] },
     { root:98.0,   arp:[392,493.88,587.33] }
   ];
+  const VICTORY_CHORDS = [
+    { root:130.81, arp:[523.25,659.25,783.99] },
+    { root:98.0,   arp:[493.88,587.33,783.99] },
+    { root:110.0,  arp:[523.25,659.25,880.0] },
+    { root:87.31,  arp:[523.25,698.46,880.0] }
+  ];
   function noiseBuffer(a){
     if(!MUSIC.noise){
       const b = a.createBuffer(1, Math.floor(a.sampleRate*0.3), a.sampleRate);
@@ -489,6 +495,15 @@
       if(step%8===0) mTone(chord.root*2, t, stepDur*3, 'triangle', 0.08);
       if(step%2===0) mTone(chord.arp[[0,1,2,1][(step/2)%4]], t, stepDur*1.8, 'triangle', 0.04);
       if(step%8===4) mNoise(t, 0.04, 0.05, 8000);
+    } else if(MUSIC.mode==='victory'){
+      // bright major-key celebration groove (C - G - Am - F)
+      const vc = VICTORY_CHORDS[Math.floor(step/8)%4];
+      if(step%4===0) mKick(t);
+      if(step%8===4) mNoise(t, 0.1, 0.22, 1800);
+      if(step%2===1) mNoise(t, 0.03, 0.07, 8000);
+      if(step%4===0 || step%4===3) mTone(vc.root, t, stepDur*1.8, 'sawtooth', 0.09);
+      mTone(vc.arp[[0,1,2,1][step%4]] * (step%16>=8 ? 2 : 1), t, stepDur*0.9, 'triangle', 0.05);
+      if(step%16===0) mTone(vc.arp[2]*2, t, stepDur*3, 'sine', 0.06);
     }
   }
   function musicTick(){
@@ -509,10 +524,17 @@
   }
   function setMusic(mode){
     if(MUSIC.mode===mode) return;
+    clearTimeout(MUSIC.startTimer);
     MUSIC.mode = mode;
-    MUSIC.bpm = mode==='question' ? 132 : 100;
+    MUSIC.bpm = mode==='question' ? 132 : mode==='victory' ? 118 : 100;
     MUSIC.urgent = false;
     if(mode!=='question'){ stopRiser(); document.body.classList.remove('urgent'); }
+    if(mode==='victory'){
+      // let the fanfare and applause play first, then bring the groove in
+      if(MUSIC.timer){ clearInterval(MUSIC.timer); MUSIC.timer = null; }
+      MUSIC.startTimer = setTimeout(()=>{ if(MUSIC.mode==='victory') applyMusic(); }, 3000);
+      return;
+    }
     applyMusic();
   }
   ['pointerdown','touchend','keydown'].forEach(ev=>document.addEventListener(ev, ()=>{ audioCtx(); }, {passive:true}));
@@ -1049,7 +1071,7 @@
   function onGameChanged(){
     if(!S.game) return;
     S.myLastAnswer = S.answersDocs.find(a=> a.playerId===S.playerId && a.qIndex===S.game.currentIndex) || null;
-    setMusic(S.game.status==='question' ? 'question' : (S.game.status==='lobby' ? 'lobby' : null));
+    setMusic(S.game.status==='question' ? 'question' : (S.game.status==='lobby' ? 'lobby' : (S.game.status==='ended' ? 'victory' : null)));
     const soundKey = S.game.status+':'+S.game.currentIndex;
     if(S.lastSoundKey!==soundKey){
       const first = S.lastSoundKey===undefined;
