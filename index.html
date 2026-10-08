@@ -31,7 +31,14 @@
   img{max-width:100%;}
   [hidden]{display:none!important;}
   ::selection{background:var(--accent);color:#fff;}
-  .app-shell{
+  #bg-logo{
+    position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);
+    width:min(80vw,420px);aspect-ratio:1/1;
+    background:url('bg-logo.png') center/contain no-repeat;
+    filter:invert(1);mix-blend-mode:screen;opacity:.1;
+    pointer-events:none;z-index:0;
+  }
+  .app-shell{position:relative;z-index:1;
     max-width:640px; margin:0 auto; min-height:100%;
     display:flex; flex-direction:column;
     padding: max(16px, env(safe-area-inset-top, 0px)) 16px max(16px, env(safe-area-inset-bottom, 0px));
@@ -222,6 +229,7 @@
 </style>
 </head>
 <body>
+<div id="bg-logo" aria-hidden="true"></div>
 <div class="app-shell">
   <div class="topbar" id="topbar"></div>
   <div class="main" id="app"></div>
