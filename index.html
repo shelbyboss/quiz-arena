@@ -148,6 +148,7 @@
   .center-text{text-align:center;}
   .qn-tag{font-family:'Kanit';font-weight:700;color:var(--accent-2);font-size:14px;letter-spacing:1px;}
   .question-text{font-family:'Kanit';font-weight:700;font-size:clamp(20px,5.5vw,28px);line-height:1.3;text-wrap:balance;margin:10px 0 16px;}
+  .countdown-big{font-family:'JetBrains Mono';font-weight:700;font-size:clamp(44px,14vw,72px);letter-spacing:3px;text-align:center;margin:6px 0;background:linear-gradient(90deg,var(--accent),var(--accent-2));-webkit-background-clip:text;background-clip:text;color:transparent;}
   .q-image{width:100%;max-height:280px;object-fit:contain;border-radius:var(--radius-md);margin:8px 0;display:block;background:var(--surface-2);transition:filter .3s linear;}
   .q-image-wrap{position:relative;width:100%;height:280px;border-radius:var(--radius-md);margin:8px 0;background:var(--surface-2);overflow:hidden;}
   .q-image-wrap .q-image{margin:0;max-height:none;height:100%;border-radius:0;}
@@ -448,6 +449,14 @@
         S.lastTickKey = tickKey;
         if(secsLeft<=3) SFX.tickFinal(); else SFX.tick();
       }
+    } else if(t.kind==='lobby'){
+      const remain = t.target - Date.now();
+      if(t.countEl) t.countEl.textContent = remain>0 ? fmtCountdown(remain) : '00:00';
+      if(t.hintEl && remain<=0) t.hintEl.textContent = 'กำลังเริ่มเกม...';
+      const secs = Math.ceil(remain/1000);
+      const key = 'lobby:'+secs;
+      if(secs>0 && secs<=5 && S.lastTickKey!==key){ S.lastTickKey = key; SFX.tickFinal(); }
+      if(remain<=0 && S.isHost) startGame();
     } else if(t.kind==='reveal'){
       const remain = Math.max(0, 5000 - (Date.now()-(t.startedAt||Date.now())));
       if(t.countEl) t.countEl.textContent = ' ('+Math.ceil(remain/1000)+')';
@@ -907,14 +916,33 @@
       }
     }
     if(S.tickTimer){ clearInterval(S.tickTimer); S.tickTimer=null; }
-    if(S.game.status==='question' || (S.game.status==='reveal' && S.game.autoAdvance)){
+    if(S.game.status==='question' || (S.game.status==='reveal' && S.game.autoAdvance) || (S.game.status==='lobby' && S.game.scheduledStartAt)){
       S.tickTimer = setInterval(updateTick, 250);
     }
   }
 
   // ================= HOST controls =================
   async function startGame(){
-    await S.db.doc('games/'+S.code).update({ status:'question', currentIndex:0, questionStartedAt:Date.now() });
+    if(!S.game || S.game.status!=='lobby' || S.starting) return;
+    S.starting = true;
+    try{
+      await S.db.doc('games/'+S.code).update({ status:'question', currentIndex:0, questionStartedAt:Date.now(), scheduledStartAt:null });
+    } finally { S.starting = false; }
+  }
+  async function setSchedule(mins){
+    mins = Math.floor(Number(mins));
+    if(!(mins>=1)) { alert('ใส่จำนวนนาทีตั้งแต่ 1 ขึ้นไป'); return; }
+    mins = Math.min(mins, 720);
+    await S.db.doc('games/'+S.code).update({ scheduledStartAt: Date.now() + mins*60000 });
+  }
+  async function cancelSchedule(){
+    await S.db.doc('games/'+S.code).update({ scheduledStartAt: null });
+  }
+  function fmtCountdown(ms){
+    const total = Math.max(0, Math.ceil(ms/1000));
+    const h = Math.floor(total/3600), m = Math.floor((total%3600)/60), s = total%60;
+    const pad = n=>String(n).padStart(2,'0');
+    return h>0 ? h+':'+pad(m)+':'+pad(s) : pad(m)+':'+pad(s);
   }
   async function revealCurrent(){
     if(!S.game || S.game.status!=='question') return;
@@ -1078,6 +1106,40 @@
       });
       card.appendChild(grid);
       app.appendChild(card);
+
+      const schedCard = el('<div class="card" style="margin-top:14px;"></div>');
+      if(g.scheduledStartAt){
+        schedCard.appendChild(el('<p class="muted center-text" style="margin:0;">เกมจะเริ่มอัตโนมัติใน</p>'));
+        const countEl = el('<div class="countdown-big"></div>');
+        schedCard.appendChild(countEl);
+        const hintEl = el('<p class="muted center-text" style="margin:0 0 10px;">ครบเวลาแล้วเกมเริ่มเอง (เปิดหน้านี้ค้างไว้)</p>');
+        schedCard.appendChild(hintEl);
+        const cancelBtn = el('<button class="btn btn-ghost btn-block">ยกเลิกการตั้งเวลา</button>');
+        cancelBtn.addEventListener('click', cancelSchedule);
+        schedCard.appendChild(cancelBtn);
+        S.tickTargets = { kind:'lobby', countEl, hintEl, target:g.scheduledStartAt };
+        updateTick();
+      } else {
+        schedCard.appendChild(el('<label>ตั้งเวลาเริ่มเกมอัตโนมัติ (อีกกี่นาที)</label>'));
+        const quick = el('<div class="mode-toggle" style="margin:0 0 10px;"></div>');
+        [1,5,10,15,30].forEach(m=>{
+          const b = el('<button type="button" class="mode-btn">'+m+'</button>');
+          b.addEventListener('click', ()=>setSchedule(m));
+          quick.appendChild(b);
+        });
+        schedCard.appendChild(quick);
+        const customRow = el('<div style="display:flex;gap:8px;"></div>');
+        const minInput = document.createElement('input');
+        minInput.type='text'; minInput.inputMode='numeric'; minInput.placeholder='กำหนดเอง (นาที)';
+        minInput.value = S.schedInput || '';
+        minInput.addEventListener('input', ()=>{ S.schedInput = minInput.value; });
+        const setBtn = el('<button type="button" class="btn btn-secondary" style="padding:10px 16px;">ตั้งเวลา</button>');
+        setBtn.addEventListener('click', ()=>setSchedule(minInput.value));
+        customRow.appendChild(minInput); customRow.appendChild(setBtn);
+        schedCard.appendChild(customRow);
+      }
+      app.appendChild(schedCard);
+
       const startBtn = el('<button class="btn btn-primary btn-block btn-lg" style="margin-top:16px;">🚀 เริ่มเกม</button>');
       startBtn.addEventListener('click', startGame);
       app.appendChild(startBtn);
@@ -1173,8 +1235,18 @@
       const card = el('<div class="card center-text"></div>');
       card.appendChild(el('<h2 style="margin:0 0 6px;">'+esc(g.title)+'</h2>'));
       card.appendChild(el('<p class="muted">สวัสดี '+esc(S.playerName)+' 👋</p>'));
-      card.appendChild(el('<div style="font-size:40px;margin:18px 0;">⏳</div>'));
-      card.appendChild(el('<p class="muted">รอเจ้าของเกมเริ่มเกม...</p>'));
+      if(g.scheduledStartAt){
+        card.appendChild(el('<p class="muted" style="margin:18px 0 0;">เกมจะเริ่มใน</p>'));
+        const countEl = el('<div class="countdown-big"></div>');
+        card.appendChild(countEl);
+        const hintEl = el('<p class="muted">เตรียมตัวให้พร้อม รอเจ้าของเกมเริ่มเกม</p>');
+        card.appendChild(hintEl);
+        S.tickTargets = { kind:'lobby', countEl, hintEl, target:g.scheduledStartAt };
+        updateTick();
+      } else {
+        card.appendChild(el('<div style="font-size:40px;margin:18px 0;">⏳</div>'));
+        card.appendChild(el('<p class="muted">รอเจ้าของเกมเริ่มเกม...</p>'));
+      }
       app.appendChild(card);
     }
 
