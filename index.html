@@ -9,9 +9,9 @@
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@600;700;800&family=Noto+Sans+Thai:wght@400;500;600;700&family=JetBrains+Mono:wght@600;700&display=swap" rel="stylesheet">
 <style>
   :root{
-    --bg:#12102A; --surface:#1E1B42; --surface-2:#292461; --surface-3:#352F79;
-    --text:#F5F3FF; --text-dim:#ABA3D9; --text-faint:#726BA8;
-    --accent:#7C5CFF; --accent-2:#FF5EA8; --ok:#26C281; --bad:#E4433C;
+    --bg:#2C2873; --surface:#3B3690; --surface-2:#4A44A8; --surface-3:#5F59C0;
+    --text:#FFFFFF; --text-dim:#D6D1F8; --text-faint:#ADA7E2;
+    --accent:#8E6DFF; --accent-2:#FF6FB1; --ok:#2FD08F; --bad:#EE5248;
     --red:#E4433C; --blue:#2C82E0; --yellow:#F2B705; --green:#26C281;
     --shadow: 0 12px 30px rgba(0,0,0,.35);
     --radius-lg:20px; --radius-md:14px; --radius-sm:10px;
@@ -22,8 +22,8 @@
     background:var(--bg); color:var(--text);
     font-family:'Noto Sans Thai','Noto Sans',system-ui,sans-serif;
     background-image:
-      radial-gradient(circle at 15% 8%, rgba(124,92,255,.25), transparent 45%),
-      radial-gradient(circle at 90% 85%, rgba(255,94,168,.18), transparent 40%);
+      radial-gradient(circle at 15% 8%, rgba(170,140,255,.38), transparent 48%),
+      radial-gradient(circle at 90% 85%, rgba(255,111,177,.24), transparent 42%);
     background-attachment:fixed;
   }
   h1,h2,h3,.display{ font-family:'Kanit',system-ui,sans-serif; letter-spacing:.2px; }
@@ -31,12 +31,17 @@
   img{max-width:100%;}
   [hidden]{display:none!important;}
   ::selection{background:var(--accent);color:#fff;}
+  /* embossed logo: a plate in the logo's shape, lit from the top-left (highlight) with a soft shadow bottom-right */
   #bg-logo{
     position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);
     width:min(80vw,420px);aspect-ratio:1/1;
-    background:url('bg-logo.png') center/contain no-repeat;
-    filter:invert(1);mix-blend-mode:screen;opacity:.055;
-    pointer-events:none;z-index:0;
+    filter:drop-shadow(-1.5px -1.5px 0 rgba(255,255,255,.55)) drop-shadow(2px 3px 3px rgba(10,5,50,.55));
+    opacity:.34;pointer-events:none;z-index:0;
+  }
+  #bg-logo::before{
+    content:'';position:absolute;inset:0;background:#6D67D2;
+    -webkit-mask:url('bg-logo-mask.png') center/contain no-repeat;
+    mask:url('bg-logo-mask.png') center/contain no-repeat;
   }
   .app-shell{position:relative;z-index:1;
     max-width:640px; margin:0 auto; min-height:100%;
