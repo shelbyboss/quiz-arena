@@ -9,7 +9,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@600;700;800&family=Noto+Sans+Thai:wght@400;500;600;700&family=JetBrains+Mono:wght@600;700&display=swap" rel="stylesheet">
 <style>
   :root{
-    --bg:#2F2A7C; --surface:#3B3690; --surface-2:#4A44A8; --surface-3:#5F59C0;
+    --bg:#201C5A; --surface:#3B3690; --surface-2:#4A44A8; --surface-3:#5F59C0;
     --text:#FFFFFF; --text-dim:#D6D1F8; --text-faint:#ADA7E2;
     --accent:#8E6DFF; --accent-2:#FF6FB1; --ok:#2FD08F; --bad:#EE5248;
     --red:#E4433C; --blue:#2C82E0; --yellow:#F2B705; --green:#26C281;
@@ -35,7 +35,7 @@
   /* party frame: top and bottom slices keep their proportions, the plain middle stretches to any screen height */
   #bg-frame{
     position:fixed;top:0;bottom:0;left:50%;transform:translateX(-50%);
-    width:var(--fw);pointer-events:none;z-index:0;
+    width:var(--fw);pointer-events:none;z-index:0;opacity:.5;
     background-image:url('bg-party-top.png'),url('bg-party-bottom.png'),url('bg-party-mid.png');
     background-repeat:no-repeat,no-repeat,no-repeat;
     background-position:center top,center bottom,center;
@@ -96,7 +96,7 @@
   .choice-card span{color:var(--text-dim);font-size:13px;}
   label{font-size:13px;color:var(--text-dim);font-weight:600;display:block;margin-bottom:6px;}
   input[type=text]{
-    width:100%;background:var(--surface-2);border:1px solid var(--surface-3);color:var(--text);
+    width:100%;background:rgba(22,18,74,.6);border:1px solid var(--surface-3);color:var(--text);
     border-radius:var(--radius-sm);padding:13px 14px;font-size:16px;font-family:inherit;
   }
   input[type=text]:focus{outline:none;border-color:var(--accent);}
