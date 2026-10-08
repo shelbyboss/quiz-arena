@@ -275,10 +275,31 @@
   // ---------- sound (synthesized with Web Audio, no audio files) ----------
   let AC = null;
   let muted = lsGet('qa_muted','0')==='1';
+  const SAMPLES = {};   // decoded audio files, e.g. SAMPLES.applause = { buf }
+  let samplesRequested = false;
+  function loadSample(name, url){
+    const a = AC; if(!a || SAMPLES[name]) return;
+    SAMPLES[name] = { buf:null };
+    fetch(url)
+      .then(r=>{ if(!r.ok) throw new Error('http '+r.status); return r.arrayBuffer(); })
+      .then(b=>new Promise((res,rej)=>a.decodeAudioData(b,res,rej)))
+      .then(buf=>{ SAMPLES[name].buf = buf; })
+      .catch(()=>{ SAMPLES[name] = null; });
+  }
+  function playSample(name, vol){
+    const s = SAMPLES[name], a = AC;
+    if(!s || !s.buf || !a || muted) return false;
+    const src = a.createBufferSource(), g = a.createGain();
+    src.buffer = s.buf; g.gain.value = vol||1;
+    src.connect(g); g.connect(a.destination);
+    src.start();
+    return true;
+  }
   function audioCtx(){
     try{
       if(!AC) AC = new (window.AudioContext||window.webkitAudioContext)();
       if(AC.state==='suspended') AC.resume();
+      if(!samplesRequested){ samplesRequested = true; loadSample('applause','applause.mp3'); }
     }catch(e){ AC=null; }
     return AC;
   }
@@ -330,7 +351,7 @@
       [523,659,784,1047,784,1047,1319].forEach((f,i)=>tone(f,i*.12,.3,'triangle',.24));
       [262,330,392].forEach(f=>tone(f,.84,.9,'square',.07));
       tone(1568,.84,.9,'triangle',.2);
-      applause(2.2);
+      if(!playSample('applause', 1)) applause(2.2);
     }
   };
 
