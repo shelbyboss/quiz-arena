@@ -9,11 +9,11 @@
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@600;700;800&family=Noto+Sans+Thai:wght@400;500;600;700&family=JetBrains+Mono:wght@600;700&display=swap" rel="stylesheet">
 <style>
   :root{
-    --bg:#E6F0FB; --page-text:#241F6E; --page-dim:#46428F; --surface:rgba(255,255,255,.95); --surface-2:#EEF1FF; --surface-3:#C7CCF3;
-    --text:#241F6E; --text-dim:#5A5798; --text-faint:#8A87BE;
+    --bg:#E6F0FB; --page-text:#241F6E; --page-dim:#46428F; --surface:#3B3690; --surface-2:#4A44A8; --surface-3:#5F59C0;
+    --text:#FFFFFF; --text-dim:#D6D1F8; --text-faint:#ADA7E2;
     --accent:#8E6DFF; --accent-2:#FF6FB1; --ok:#2FD08F; --bad:#EE5248;
     --red:#E4433C; --blue:#2C82E0; --yellow:#F2B705; --green:#26C281;
-    --shadow: 0 10px 28px rgba(36,31,110,.22);
+    --shadow: 0 12px 30px rgba(36,31,110,.38);
     --fw: min(100vw, 760px, 82vh);
     --radius-lg:20px; --radius-md:14px; --radius-sm:10px;
   }
@@ -55,11 +55,11 @@
   .brand .dot{width:10px;height:10px;border-radius:50%;background:var(--accent-2);box-shadow:0 0 12px var(--accent-2);}
   .room-chip{
     font-family:'JetBrains Mono';font-weight:700;letter-spacing:2px;
-    background:#fff;border:1px solid var(--surface-3);box-shadow:0 2px 6px rgba(36,31,110,.15);
-    padding:6px 10px;border-radius:999px;font-size:12px;color:var(--text);white-space:nowrap;
+    background:var(--surface-2);border:1px solid var(--surface-3);box-shadow:0 2px 6px rgba(36,31,110,.25);
+    padding:6px 10px;border-radius:999px;font-size:12px;color:var(--text-dim);white-space:nowrap;
   }
   .exit-btn{
-    background:#fff;border:1px solid var(--surface-3);color:var(--text);box-shadow:0 2px 6px rgba(36,31,110,.15);
+    background:var(--surface-2);border:1px solid var(--surface-3);color:var(--text-dim);box-shadow:0 2px 6px rgba(36,31,110,.25);
     width:34px;height:34px;border-radius:50%;cursor:pointer;font-size:16px;
     display:flex;align-items:center;justify-content:center;
   }
@@ -97,7 +97,7 @@
   .choice-card span{color:var(--text-dim);font-size:13px;}
   label{font-size:13px;color:var(--text-dim);font-weight:600;display:block;margin-bottom:6px;}
   input[type=text]{
-    width:100%;background:#F7F8FF;border:1px solid var(--surface-3);color:var(--text);
+    width:100%;background:rgba(22,18,74,.6);border:1px solid var(--surface-3);color:var(--text);
     border-radius:var(--radius-sm);padding:13px 14px;font-size:16px;font-family:inherit;
   }
   input[type=text]:focus{outline:none;border-color:var(--accent);}
@@ -153,7 +153,7 @@
   .avatar-preview-row{display:flex;align-items:center;gap:14px;margin-bottom:10px;}
   .color-swatches{display:flex;gap:8px;margin-bottom:10px;}
   .color-swatch{width:28px;height:28px;border-radius:50%;cursor:pointer;border:2px solid transparent;flex:none;}
-  .color-swatch.active{border-color:var(--text);box-shadow:0 0 0 2px #fff inset;}
+  .color-swatch.active{border-color:#fff;}
   .emoji-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:6px;max-height:160px;overflow-y:auto;}
   .emoji-btn{background:var(--surface-2);border:1px solid var(--surface-3);border-radius:var(--radius-sm);font-size:20px;padding:6px 0;cursor:pointer;}
   .emoji-btn.active{border-color:var(--accent);background:var(--surface-3);}
@@ -208,7 +208,7 @@
   .at-2{background:linear-gradient(160deg,var(--yellow),#c08e00);}
   .at-3{background:linear-gradient(160deg,var(--green),#0f8f5f);}
   .answer-tile.dim{opacity:.35;}
-  .answer-tile.picked{outline:3px solid var(--text);outline-offset:2px;}
+  .answer-tile.picked{outline:3px solid #fff;}
   .bars{display:flex;flex-direction:column;gap:10px;margin:14px 0;}
   .bar-row{display:flex;align-items:center;gap:10px;}
   .bar-shape{width:26px;height:26px;border-radius:7px;flex:none;display:flex;align-items:center;justify-content:center;color:#fff;font-size:13px;}
@@ -236,7 +236,7 @@
   .podium-name{font-weight:700;font-size:13px;margin-top:8px;}
   .podium-score{font-family:'JetBrains Mono';font-size:12px;color:var(--text-dim);}
   .warn-banner{background:rgba(242,183,5,.15);border:1px solid rgba(242,183,5,.4);color:#8A5A00;padding:12px 14px;border-radius:var(--radius-sm);font-size:13px;margin-bottom:14px;}
-  .err-banner{background:rgba(228,67,60,.12);border:1px solid rgba(228,67,60,.45);color:#B3261E;padding:12px 14px;border-radius:var(--radius-sm);font-size:13px;margin-bottom:14px;}
+  .err-banner{background:rgba(228,67,60,.12);border:1px solid rgba(228,67,60,.45);color:#ff8b85;padding:12px 14px;border-radius:var(--radius-sm);font-size:13px;margin-bottom:14px;}
   .footer-note{text-align:center;color:var(--page-dim);font-size:12px;margin-top:auto;padding-top:10px;}
   a{color:var(--accent-2);}
 </style>
@@ -612,7 +612,14 @@
       const secs = Math.ceil(remain/1000);
       const key = 'lobby:'+secs;
       if(secs>0 && secs<=5 && S.lastTickKey!==key){ S.lastTickKey = key; SFX.tickFinal(); }
-      if(remain<=0 && S.isHost) startGame();
+      if(remain<=0 && S.isHost){
+        if(S.playersDocs.length>0) startGame();
+        else if(!S.schedCancelling){
+          S.schedCancelling = true;
+          cancelSchedule().finally(()=>{ S.schedCancelling = false; });
+          alert('ครบเวลาแล้วแต่ยังไม่มีผู้เล่นเข้าร่วม จึงยังไม่เริ่มเกม กด "เริ่มเกม" เมื่อพร้อม');
+        }
+      }
     } else if(t.kind==='reveal'){
       const remain = Math.max(0, 5000 - (Date.now()-(t.startedAt||Date.now())));
       if(t.countEl) t.countEl.textContent = ' ('+Math.ceil(remain/1000)+')';
@@ -1298,7 +1305,10 @@
       app.appendChild(schedCard);
 
       const startBtn = el('<button class="btn btn-primary btn-block btn-lg" style="margin-top:16px;">🚀 เริ่มเกม</button>');
-      startBtn.addEventListener('click', startGame);
+      startBtn.addEventListener('click', ()=>{
+        if(S.playersDocs.length===0 && !confirm('ยังไม่มีผู้เล่นเข้าร่วมห้องนี้ เริ่มเกมเลยไหม?')) return;
+        startGame();
+      });
       app.appendChild(startBtn);
     }
 
@@ -1503,19 +1513,24 @@
       podium.appendChild(col);
     });
     card.appendChild(podium);
+    if(rows.length===0){
+      card.appendChild(el('<p class="muted" style="margin:18px 0 6px;">ไม่มีผู้เล่นเข้าร่วมเกมนี้ จึงไม่มีอันดับ</p>'));
+    }
     wrap.appendChild(card);
 
-    const lbCard = el('<div class="card" style="margin-top:14px;"></div>');
-    lbCard.appendChild(el('<h3 style="margin:0 0 10px;">อันดับทั้งหมด</h3>'));
-    rows.forEach((r,i)=>{
-      const row = el('<div class="lb-row'+(r.id===S.playerId?' me':'')+'"></div>');
-      row.appendChild(el('<div class="lb-rank">#'+(i+1)+'</div>'));
-      row.appendChild(avatarBadgeEl(r, 28));
-      row.appendChild(el('<div class="lb-name">'+esc(r.name)+'</div>'));
-      row.appendChild(el('<div class="lb-score">'+r.score+'</div>'));
-      lbCard.appendChild(row);
-    });
-    wrap.appendChild(lbCard);
+    if(rows.length>0){
+      const lbCard = el('<div class="card" style="margin-top:14px;"></div>');
+      lbCard.appendChild(el('<h3 style="margin:0 0 10px;">อันดับทั้งหมด</h3>'));
+      rows.forEach((r,i)=>{
+        const row = el('<div class="lb-row'+(r.id===S.playerId?' me':'')+'"></div>');
+        row.appendChild(el('<div class="lb-rank">#'+(i+1)+'</div>'));
+        row.appendChild(avatarBadgeEl(r, 28));
+        row.appendChild(el('<div class="lb-name">'+esc(r.name)+'</div>'));
+        row.appendChild(el('<div class="lb-score">'+r.score+'</div>'));
+        lbCard.appendChild(row);
+      });
+      wrap.appendChild(lbCard);
+    }
 
     const homeBtn = el('<button class="btn btn-primary btn-block btn-lg" style="margin-top:16px;">🏠 กลับหน้าแรก</button>');
     homeBtn.addEventListener('click', goHome);
