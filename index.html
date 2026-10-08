@@ -9,11 +9,12 @@
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@600;700;800&family=Noto+Sans+Thai:wght@400;500;600;700&family=JetBrains+Mono:wght@600;700&display=swap" rel="stylesheet">
 <style>
   :root{
-    --bg:#2C2873; --surface:#3B3690; --surface-2:#4A44A8; --surface-3:#5F59C0;
+    --bg:#2F2A7C; --surface:#3B3690; --surface-2:#4A44A8; --surface-3:#5F59C0;
     --text:#FFFFFF; --text-dim:#D6D1F8; --text-faint:#ADA7E2;
     --accent:#8E6DFF; --accent-2:#FF6FB1; --ok:#2FD08F; --bad:#EE5248;
     --red:#E4433C; --blue:#2C82E0; --yellow:#F2B705; --green:#26C281;
     --shadow: 0 12px 30px rgba(0,0,0,.35);
+    --fw: min(100vw, 760px, 82vh);
     --radius-lg:20px; --radius-md:14px; --radius-sm:10px;
   }
   *{box-sizing:border-box;}
@@ -31,24 +32,23 @@
   img{max-width:100%;}
   [hidden]{display:none!important;}
   ::selection{background:var(--accent);color:#fff;}
-  /* embossed logo: a plate in the logo's shape, lit from the top-left (highlight) with a soft shadow bottom-right */
-  #bg-logo{
-    position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);
-    width:min(80vw,420px);aspect-ratio:1/1;
-    filter:drop-shadow(-1.5px -1.5px 0 rgba(255,255,255,.55)) drop-shadow(2px 3px 3px rgba(10,5,50,.55));
-    opacity:.34;pointer-events:none;z-index:0;
-  }
-  #bg-logo::before{
-    content:'';position:absolute;inset:0;background:#6D67D2;
-    -webkit-mask:url('bg-logo-mask.png') center/contain no-repeat;
-    mask:url('bg-logo-mask.png') center/contain no-repeat;
+  /* party frame: top and bottom slices keep their proportions, the plain middle stretches to any screen height */
+  #bg-frame{
+    position:fixed;top:0;bottom:0;left:50%;transform:translateX(-50%);
+    width:var(--fw);pointer-events:none;z-index:0;
+    background-image:url('bg-party-top.png'),url('bg-party-bottom.png'),url('bg-party-mid.png');
+    background-repeat:no-repeat,no-repeat,no-repeat;
+    background-position:center top,center bottom,center;
+    background-size:100% auto,100% auto,100% 100%;
   }
   .app-shell{position:relative;z-index:1;
-    max-width:640px; margin:0 auto; min-height:100%;
+    max-width:var(--fw); margin:0 auto; min-height:100%;
     display:flex; flex-direction:column;
-    padding: max(16px, env(safe-area-inset-top, 0px)) 16px max(16px, env(safe-area-inset-bottom, 0px));
+    padding: calc(env(safe-area-inset-top, 0px) + var(--fw)*0.15) clamp(30px, calc(var(--fw)*0.105), 76px) calc(env(safe-area-inset-bottom, 0px) + var(--fw)*0.38);
     gap:16px;
   }
+  .topbar,.hero-sub,.footer-note{text-shadow:0 1px 4px rgba(20,10,80,.85);}
+  .hero-title{filter:drop-shadow(0 2px 4px rgba(20,10,80,.8));}
   .topbar{display:flex;align-items:center;justify-content:space-between;gap:12px;}
   .brand{display:flex;align-items:center;gap:10px;font-family:'Kanit';font-weight:700;font-size:18px;color:var(--text);}
   .brand .dot{width:10px;height:10px;border-radius:50%;background:var(--accent-2);box-shadow:0 0 12px var(--accent-2);}
@@ -234,7 +234,7 @@
 </style>
 </head>
 <body>
-<div id="bg-logo" aria-hidden="true"></div>
+<div id="bg-frame" aria-hidden="true"></div>
 <div class="app-shell">
   <div class="topbar" id="topbar"></div>
   <div class="main" id="app"></div>
