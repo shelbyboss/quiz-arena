@@ -241,6 +241,137 @@
     return id;
   }
 
+  // ---------- sound (synthesized with Web Audio, no audio files) ----------
+  let AC = null;
+  let muted = lsGet('qa_muted','0')==='1';
+  function audioCtx(){
+    try{
+      if(!AC) AC = new (window.AudioContext||window.webkitAudioContext)();
+      if(AC.state==='suspended') AC.resume();
+    }catch(e){ AC=null; }
+    return AC;
+  }
+  function tone(freq, start, dur, type, vol){
+    if(muted) return;
+    const a = audioCtx(); if(!a) return;
+    const t = a.currentTime + start;
+    const o = a.createOscillator(), g = a.createGain();
+    o.type = type||'sine';
+    o.frequency.setValueAtTime(freq, t);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(vol||0.2, t+0.015);
+    g.gain.exponentialRampToValueAtTime(0.0001, t+dur);
+    o.connect(g); g.connect(a.destination);
+    o.start(t); o.stop(t+dur+0.03);
+  }
+  const SFX = {
+    join(){ tone(660,0,.12,'sine',.2); tone(880,.1,.12,'sine',.2); tone(1320,.2,.2,'sine',.2); },
+    start(){
+      [262,330,392,523,659,784].forEach((f,i)=>tone(f,i*.055,.14,'sawtooth',.1));
+      tone(1047,.36,.4,'triangle',.22); tone(523,.36,.4,'square',.08);
+    },
+    tick(){ tone(900,0,.06,'square',.07); },
+    tickFinal(){ tone(1300,0,.09,'square',.12); tone(650,0,.09,'triangle',.1); },
+    click(){ tone(520,0,.06,'triangle',.22); tone(780,.04,.08,'triangle',.18); },
+    reveal(){ tone(330,0,.1,'sawtooth',.1); tone(440,.09,.1,'sawtooth',.1); tone(587,.18,.28,'triangle',.24); },
+    correct(){
+      [523,659,784,1047,1319].forEach((f,i)=>tone(f,i*.08,.22,'triangle',.24));
+      tone(2093,.4,.3,'sine',.1); tone(262,0,.5,'square',.06);
+    },
+    wrong(){ tone(247,0,.2,'sawtooth',.16); tone(196,.18,.2,'sawtooth',.16); tone(147,.36,.5,'sawtooth',.16); },
+    end(){
+      [523,659,784,1047,784,1047,1319].forEach((f,i)=>tone(f,i*.12,.3,'triangle',.24));
+      [262,330,392].forEach(f=>tone(f,.84,.9,'square',.07));
+      tone(1568,.84,.9,'triangle',.2);
+    }
+  };
+
+  // ---------- background music: synthesized step sequencer ----------
+  const MUSIC = { timer:null, step:0, nextTime:0, mode:null, bpm:132, noise:null };
+  const CHORDS = [
+    { root:110.0,  arp:[440,523.25,659.25] },
+    { root:110.0,  arp:[440,523.25,659.25] },
+    { root:87.31,  arp:[349.23,440,523.25] },
+    { root:98.0,   arp:[392,493.88,587.33] }
+  ];
+  function noiseBuffer(a){
+    if(!MUSIC.noise){
+      const b = a.createBuffer(1, Math.floor(a.sampleRate*0.3), a.sampleRate);
+      const d = b.getChannelData(0);
+      for(let i=0;i<d.length;i++) d[i] = Math.random()*2-1;
+      MUSIC.noise = b;
+    }
+    return MUSIC.noise;
+  }
+  function mTone(freq, t, dur, type, vol){
+    const a = AC;
+    const o = a.createOscillator(), g = a.createGain();
+    o.type = type; o.frequency.setValueAtTime(freq, t);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(vol, t+0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, t+dur);
+    o.connect(g); g.connect(a.destination);
+    o.start(t); o.stop(t+dur+0.02);
+  }
+  function mKick(t){
+    const a = AC, o = a.createOscillator(), g = a.createGain();
+    o.type = 'sine';
+    o.frequency.setValueAtTime(160, t);
+    o.frequency.exponentialRampToValueAtTime(42, t+0.12);
+    g.gain.setValueAtTime(0.55, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t+0.2);
+    o.connect(g); g.connect(a.destination);
+    o.start(t); o.stop(t+0.22);
+  }
+  function mNoise(t, dur, vol, hpFreq){
+    const a = AC, s = a.createBufferSource(), f = a.createBiquadFilter(), g = a.createGain();
+    s.buffer = noiseBuffer(a);
+    f.type = 'highpass'; f.frequency.value = hpFreq;
+    g.gain.setValueAtTime(vol, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t+dur);
+    s.connect(f); f.connect(g); g.connect(a.destination);
+    s.start(t); s.stop(t+dur+0.02);
+  }
+  function scheduleStep(step, t){
+    const chord = CHORDS[Math.floor(step/8)%4];
+    const stepDur = 60/MUSIC.bpm/4;
+    if(MUSIC.mode==='question'){
+      if(step%4===0) mKick(t);
+      if(step%4===2) mNoise(t, 0.05, 0.12, 7000);
+      if(step%8===4) mNoise(t, 0.12, 0.3, 1800);
+      if(step%2===0) mTone(chord.root, t, stepDur*1.6, 'sawtooth', 0.09);
+      const arpNote = chord.arp[[0,1,2,1][step%4]] * (step%16>=8 ? 2 : 1);
+      mTone(arpNote, t, stepDur*0.9, 'square', 0.03);
+    } else if(MUSIC.mode==='lobby'){
+      if(step%8===0) mTone(chord.root*2, t, stepDur*3, 'triangle', 0.08);
+      if(step%2===0) mTone(chord.arp[[0,1,2,1][(step/2)%4]], t, stepDur*1.8, 'triangle', 0.04);
+      if(step%8===4) mNoise(t, 0.04, 0.05, 8000);
+    }
+  }
+  function musicTick(){
+    const a = AC;
+    if(!a || muted || !MUSIC.mode) return;
+    while(MUSIC.nextTime < a.currentTime + 0.15){
+      scheduleStep(MUSIC.step, MUSIC.nextTime);
+      MUSIC.nextTime += 60/MUSIC.bpm/4;
+      MUSIC.step = (MUSIC.step+1)%32;
+    }
+  }
+  function applyMusic(){
+    if(MUSIC.timer){ clearInterval(MUSIC.timer); MUSIC.timer = null; }
+    if(!MUSIC.mode || muted) return;
+    const a = audioCtx(); if(!a) return;
+    MUSIC.step = 0; MUSIC.nextTime = a.currentTime + 0.05;
+    MUSIC.timer = setInterval(musicTick, 25);
+  }
+  function setMusic(mode){
+    if(MUSIC.mode===mode) return;
+    MUSIC.mode = mode;
+    MUSIC.bpm = mode==='question' ? 132 : 100;
+    applyMusic();
+  }
+  ['pointerdown','touchend','keydown'].forEach(ev=>document.addEventListener(ev, ()=>{ audioCtx(); }, {passive:true}));
+
   const SHAPES = ['▲','◆','●','■'];
   const AVATAR_EMOJI = ['😀','😎','🤠','🥳','🤖','👻','👽','🐱','🐶','🦊','🐼','🐸','🦁','🐯','🐨','🐵','🦄','🐙','🦖','🐧','🍕','⚽','🎮','🎸','🚀','⭐'];
   const AVATAR_COLORS = ['#E4433C','#2C82E0','#F2B705','#26C281','#7C5CFF','#FF5EA8','#00BCD4','#FF8A3D'];
@@ -311,6 +442,12 @@
       if(t.timerFill) t.timerFill.style.width = pct+'%';
       if(t.secsLabel) t.secsLabel.textContent = '⏱ เหลือ '+secsLeft+' วิ';
       if(t.imgRef) applyImageReveal(t.imgRef, 1-pct/100);
+      const tickKey = S.code+':'+(S.game?S.game.currentIndex:'')+':'+secsLeft;
+      if(MUSIC.mode==='question') MUSIC.bpm = secsLeft<=5 ? 160 : 132;
+      if(secsLeft>0 && secsLeft<=5 && S.lastTickKey!==tickKey){
+        S.lastTickKey = tickKey;
+        if(secsLeft<=3) SFX.tickFinal(); else SFX.tick();
+      }
     } else if(t.kind==='reveal'){
       const remain = Math.max(0, 5000 - (Date.now()-(t.startedAt||Date.now())));
       if(t.countEl) t.countEl.textContent = ' ('+Math.ceil(remain/1000)+')';
@@ -356,6 +493,9 @@
     if(S.questionTimer){ clearTimeout(S.questionTimer); S.questionTimer=null; }
     if(S.tickTimer){ clearInterval(S.tickTimer); S.tickTimer=null; }
     S.tickTargets = null;
+    S.lastSoundKey = undefined;
+    S.lastTickKey = '';
+    setMusic(null);
   }
 
   function goHome(){
@@ -720,7 +860,9 @@
       render();
     }, err=>{ console.error(err); });
     const uPlayers = S.db.collection('games/'+code+'/players').onSnapshot(qs=>{
+      const prevCount = S.playersDocs.length;
       S.playersDocs = qs.docs.map(d=>({ id:d.id, ...d.data() }));
+      if(S.isHost && S.game && S.game.status==='lobby' && S.playersDocs.length>prevCount) SFX.join();
       render();
     }, err=>{ console.error(err); });
     const uAnswers = S.db.collection('games/'+code+'/answers').onSnapshot(qs=>{
@@ -734,6 +876,21 @@
   function onGameChanged(){
     if(!S.game) return;
     S.myLastAnswer = S.answersDocs.find(a=> a.playerId===S.playerId && a.qIndex===S.game.currentIndex) || null;
+    setMusic(S.game.status==='question' ? 'question' : (S.game.status==='lobby' ? 'lobby' : null));
+    const soundKey = S.game.status+':'+S.game.currentIndex;
+    if(S.lastSoundKey!==soundKey){
+      const first = S.lastSoundKey===undefined;
+      S.lastSoundKey = soundKey;
+      if(!first || S.game.status!=='lobby'){
+        if(S.game.status==='question') SFX.start();
+        else if(S.game.status==='reveal'){
+          if(S.isHost) SFX.reveal();
+          else if(S.myLastAnswer && S.myLastAnswer.correct) SFX.correct();
+          else SFX.wrong();
+        }
+        else if(S.game.status==='ended') SFX.end();
+      }
+    }
     if(S.isHost){
       if(S.game.status==='question'){
         if(S.questionTimer) clearTimeout(S.questionTimer);
@@ -860,6 +1017,7 @@
     const frac = Math.max(0, Math.min(1, 1 - elapsed/limitMs));
     const points = correct ? Math.round(500 + 500*frac) : 0;
     S.myLastAnswer = { qIndex:idx, playerId:S.playerId, choiceIndex:ci, correct, points, answeredAtMs:now };
+    SFX.click();
     render();
     await S.db.doc('games/'+S.code+'/answers/'+idx+'_'+S.playerId).set(S.myLastAnswer);
   }
@@ -872,6 +1030,15 @@
     bar.appendChild(brand);
     const right = el('<div style="display:flex;align-items:center;gap:10px;"></div>');
     if(S.code) right.appendChild(el('<div class="room-chip">'+esc(S.code)+'</div>'));
+    const soundBtn = el('<button class="exit-btn" title="เปิด/ปิดเสียง">'+(muted?'🔇':'🔊')+'</button>');
+    soundBtn.addEventListener('click', ()=>{
+      muted = !muted;
+      lsSet('qa_muted', muted?'1':'0');
+      applyMusic();
+      if(!muted) SFX.click();
+      renderTopbar();
+    });
+    right.appendChild(soundBtn);
     if(S.screen!=='home'){
       const exitBtn = el('<button class="exit-btn" title="ออก">✕</button>');
       exitBtn.addEventListener('click', exitCurrent);
