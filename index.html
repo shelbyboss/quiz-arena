@@ -170,6 +170,15 @@
   body.urgent .timerbar-fill{background:linear-gradient(90deg,#ff3b30,#ff9500);}
   body.urgent .timer-label span:first-child{color:#ff6b5e;font-weight:700;font-size:15px;}
   @media (prefers-reduced-motion: reduce){ body.urgent::after{animation:none;opacity:.6;} }
+  .countdown-go{
+    font-family:'JetBrains Mono';font-weight:700;text-align:center;line-height:1;
+    font-size:clamp(96px,38vw,190px);margin:14px 0 6px;
+    background:linear-gradient(180deg,#fff,#c9b8ff 55%,var(--accent-2));-webkit-background-clip:text;background-clip:text;color:transparent;
+    filter:drop-shadow(0 6px 14px rgba(20,10,80,.5));
+  }
+  .countdown-go.pop{animation:cdPop .9s ease-out;}
+  @keyframes cdPop{0%{transform:scale(1.7);opacity:0;}25%{opacity:1;}100%{transform:scale(1);opacity:1;}}
+  @media (prefers-reduced-motion: reduce){ .countdown-go.pop{animation:none;} }
   .countdown-big{font-family:'JetBrains Mono';font-weight:700;font-size:clamp(44px,14vw,72px);letter-spacing:3px;text-align:center;margin:6px 0;background:linear-gradient(90deg,var(--accent),var(--accent-2));-webkit-background-clip:text;background-clip:text;color:transparent;}
   .q-image{width:100%;height:min(280px,22vh);object-fit:contain;border-radius:var(--radius-md);margin:8px 0;display:block;background:var(--surface-2);transition:filter .3s linear;}
   .q-image-wrap{position:relative;width:100%;height:min(280px,22vh);border-radius:var(--radius-md);margin:8px 0;background:var(--surface-2);overflow:hidden;}
@@ -323,6 +332,12 @@
       tone(1047,.36,.4,'triangle',.22); tone(523,.36,.4,'square',.08);
     },
     tick(){ tone(900,0,.06,'square',.07); },
+    // "get ready" countdown: pitch climbs with each number
+    count(n){
+      const f = 330 + (5-n)*80;
+      tone(f,0,.22,'triangle',.3); tone(f*2,0,.14,'sine',.12);
+      if(AC && !muted) mKick(AC.currentTime);
+    },
     tickFinal(){ tone(1300,0,.09,'square',.12); tone(650,0,.09,'triangle',.1); },
     // last-5-seconds alarm: more beeps per second and higher pitch as time runs out
     urgent(secs){
@@ -539,6 +554,7 @@
   }
   ['pointerdown','touchend','keydown'].forEach(ev=>document.addEventListener(ev, ()=>{ audioCtx(); }, {passive:true}));
 
+  const COUNTDOWN_MS = 5000;   // "get ready" countdown after the host presses start
   const SHAPES = ['▲','◆','●','■'];
   const AVATAR_EMOJI = ['😀','😎','🤠','🥳','🤖','👻','👽','🐱','🐶','🦊','🐼','🐸','🦁','🐯','🐨','🐵','🦄','🐙','🦖','🐧','🍕','⚽','🎮','🎸','🚀','⭐'];
   const AVATAR_COLORS = ['#E4433C','#2C82E0','#F2B705','#26C281','#7C5CFF','#FF5EA8','#00BCD4','#FF8A3D'];
@@ -641,6 +657,14 @@
           cancelSchedule().finally(()=>{ S.schedCancelling = false; });
           alert('ครบเวลาแล้วแต่ยังไม่มีผู้เล่นเข้าร่วม จึงยังไม่เริ่มเกม กด "เริ่มเกม" เมื่อพร้อม');
         }
+      }
+    } else if(t.kind==='countdown'){
+      const n = Math.max(0, Math.min(5, Math.ceil((COUNTDOWN_MS - (Date.now()-t.startedAt))/1000)));
+      if(S.cdShown!==n){
+        S.cdShown = n;
+        t.numEl.textContent = n>0 ? String(n) : 'GO!';
+        t.numEl.classList.remove('pop'); void t.numEl.offsetWidth; t.numEl.classList.add('pop');
+        if(n>0) SFX.count(n);
       }
     } else if(t.kind==='reveal'){
       const remain = Math.max(0, 5000 - (Date.now()-(t.startedAt||Date.now())));
@@ -1097,12 +1121,16 @@
         if(S.questionTimer) clearTimeout(S.questionTimer);
         const remaining = 5000 - (Date.now() - (S.game.revealStartedAt||Date.now()));
         S.questionTimer = setTimeout(()=>{ nextQuestion(); }, Math.max(300, remaining+250));
+      } else if(S.game.status==='countdown'){
+        if(S.questionTimer) clearTimeout(S.questionTimer);
+        const remaining = COUNTDOWN_MS - (Date.now() - (S.game.countdownStartedAt||Date.now()));
+        S.questionTimer = setTimeout(()=>{ beginFirstQuestion(); }, Math.max(200, remaining+150));
       } else if(S.questionTimer){
         clearTimeout(S.questionTimer); S.questionTimer=null;
       }
     }
     if(S.tickTimer){ clearInterval(S.tickTimer); S.tickTimer=null; }
-    if(S.game.status==='question' || (S.game.status==='reveal' && S.game.autoAdvance) || (S.game.status==='lobby' && S.game.scheduledStartAt)){
+    if(S.game.status==='question' || S.game.status==='countdown' || (S.game.status==='reveal' && S.game.autoAdvance) || (S.game.status==='lobby' && S.game.scheduledStartAt)){
       S.tickTimer = setInterval(updateTick, 250);
     }
   }
@@ -1112,8 +1140,12 @@
     if(!S.game || S.game.status!=='lobby' || S.starting) return;
     S.starting = true;
     try{
-      await S.db.doc('games/'+S.code).update({ status:'question', currentIndex:0, questionStartedAt:Date.now(), scheduledStartAt:null });
+      await S.db.doc('games/'+S.code).update({ status:'countdown', currentIndex:0, countdownStartedAt:Date.now(), scheduledStartAt:null });
     } finally { S.starting = false; }
+  }
+  async function beginFirstQuestion(){
+    if(!S.game || S.game.status!=='countdown') return;
+    await S.db.doc('games/'+S.code).update({ status:'question', currentIndex:0, questionStartedAt:Date.now() });
   }
   async function setSchedule(mins){
     mins = Math.floor(Number(mins));
@@ -1268,6 +1300,21 @@
     return { pct, secsLeft: Math.ceil(remain/1000) };
   }
 
+  // Big "5…4…3…2…1…GO!" card shown to everyone between pressing start and the first question.
+  // Timing uses this device's own arrival time so a wrong phone clock can't skew the numbers.
+  function buildCountdownCard(g){
+    if(S.cdKey!==g.countdownStartedAt){ S.cdKey = g.countdownStartedAt; S.cdLocalStart = Date.now(); S.cdShown = null; }
+    const card = el('<div class="card center-text"></div>');
+    card.appendChild(el('<h2 style="margin:0 0 4px;">เตรียมตัวให้พร้อม!</h2>'));
+    card.appendChild(el('<p class="muted" style="margin:0;">คำถามแรกกำลังจะมา</p>'));
+    const numEl = el('<div class="countdown-go pop"></div>');
+    numEl.textContent = String(Math.max(0, Math.min(5, Math.ceil((COUNTDOWN_MS - (Date.now()-S.cdLocalStart))/1000))));
+    card.appendChild(numEl);
+    S.tickTargets = { kind:'countdown', numEl, startedAt:S.cdLocalStart };
+    updateTick();
+    return card;
+  }
+
   function renderHostPlay(){
     const app = document.getElementById('app'); app.innerHTML='';
     if(!S.game){ app.appendChild(el('<div class="card center-text muted">กำลังโหลด...</div>')); renderTopbar(); return; }
@@ -1333,6 +1380,8 @@
       });
       app.appendChild(startBtn);
     }
+
+    else if(g.status==='countdown'){ app.appendChild(buildCountdownCard(g)); }
 
     else if(g.status==='question'){
       const q = g.questions[g.currentIndex];
@@ -1438,6 +1487,8 @@
       }
       app.appendChild(card);
     }
+
+    else if(g.status==='countdown'){ app.appendChild(buildCountdownCard(g)); }
 
     else if(g.status==='question'){
       const q = g.questions[g.currentIndex];
