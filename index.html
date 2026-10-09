@@ -644,7 +644,7 @@
         SFX.urgent(secsLeft);
       }
     } else if(t.kind==='lobby'){
-      const remain = t.target - Date.now();
+      const remain = t.target - nowSrv();
       if(t.countEl) t.countEl.textContent = remain>0 ? fmtCountdown(remain) : '00:00';
       if(t.hintEl && remain<=0) t.hintEl.textContent = 'กำลังเริ่มเกม...';
       const secs = Math.ceil(remain/1000);
@@ -667,7 +667,7 @@
         if(n>0) SFX.count(n);
       }
     } else if(t.kind==='reveal'){
-      const remain = Math.max(0, 5000 - (Date.now()-(t.startedAt||Date.now())));
+      const remain = Math.max(0, 5000 - (nowSrv()-(t.startedAt||nowSrv())));
       if(t.countEl) t.countEl.textContent = ' ('+Math.ceil(remain/1000)+')';
     }
   }
@@ -704,6 +704,31 @@
     avatarEmoji:lsGet('qa_avatar_emoji','😀'), avatarColor:lsGet('qa_avatar_color','#7C5CFF'),
     subs:[], questionTimer:null, tickTimer:null, myLastAnswer:null,
   };
+
+  // ---------- shared clock ----------
+  // Every device's clock is slightly (sometimes very) different. All game timing is therefore
+  // expressed in Firestore SERVER time: each device measures its own offset to the server and
+  // uses nowSrv() instead of Date.now(), so a wrong PC/phone clock can't shorten anyone's question.
+  let clockOffset = 0;
+  function nowSrv(){ return Date.now() + clockOffset; }
+  async function syncClock(){
+    if(!S.db || !S.code) return;
+    try{
+      const ref = S.db.doc('games/'+S.code+'/clock/'+S.playerId);
+      let best = null;
+      for(let i=0;i<3;i++){
+        const t0 = Date.now();
+        await ref.set({ t: firebase.firestore.FieldValue.serverTimestamp() });
+        const t1 = Date.now();
+        const snap = await ref.get({ source:'server' });
+        const serverMs = snap.data().t.toMillis();
+        const rtt = t1 - t0;
+        if(!best || rtt < best.rtt) best = { rtt, offset: serverMs - (t0 + rtt/2) };
+      }
+      if(best && best.rtt < 4000) clockOffset = best.offset;
+      S.clockInfo = best;
+    }catch(e){ console.warn('clock sync failed', e); }
+  }
 
   function clearSubs(){
     S.subs.forEach(u=>{ try{u();}catch(e){} });
@@ -1064,6 +1089,7 @@
     };
     await S.db.doc('games/'+code).set(gameData);
     S.code=code; S.isHost=true; S.game=gameData;
+    syncClock();
     history.replaceState(null,'','?room='+code);
     subscribeToGame(code);
     S.screen='host-play'; render();
@@ -1096,6 +1122,7 @@
     if(!S.game) return;
     S.myLastAnswer = S.answersDocs.find(a=> a.playerId===S.playerId && a.qIndex===S.game.currentIndex) || null;
     setMusic(S.game.status==='question' ? 'question' : (S.game.status==='lobby' ? 'lobby' : (S.game.status==='ended' ? 'victory' : null)));
+    if(S.game.status==='countdown' && S.cdSyncKey!==S.game.countdownStartedAt){ S.cdSyncKey = S.game.countdownStartedAt; syncClock(); }
     const soundKey = S.game.status+':'+S.game.currentIndex;
     if(S.lastSoundKey!==soundKey){
       const first = S.lastSoundKey===undefined;
@@ -1115,15 +1142,15 @@
         if(S.questionTimer) clearTimeout(S.questionTimer);
         const q = S.game.questions[S.game.currentIndex];
         const limitMs = (q.timeLimitSec||20)*1000;
-        const remaining = limitMs - (Date.now() - (S.game.questionStartedAt||Date.now()));
+        const remaining = limitMs - (nowSrv() - (S.game.questionStartedAt||nowSrv()));
         S.questionTimer = setTimeout(()=>{ revealCurrent(); }, Math.max(300, remaining+250));
       } else if(S.game.status==='reveal' && S.game.autoAdvance){
         if(S.questionTimer) clearTimeout(S.questionTimer);
-        const remaining = 5000 - (Date.now() - (S.game.revealStartedAt||Date.now()));
+        const remaining = 5000 - (nowSrv() - (S.game.revealStartedAt||nowSrv()));
         S.questionTimer = setTimeout(()=>{ nextQuestion(); }, Math.max(300, remaining+250));
       } else if(S.game.status==='countdown'){
         if(S.questionTimer) clearTimeout(S.questionTimer);
-        const remaining = COUNTDOWN_MS - (Date.now() - (S.game.countdownStartedAt||Date.now()));
+        const remaining = COUNTDOWN_MS - (nowSrv() - (S.game.countdownStartedAt||nowSrv()));
         S.questionTimer = setTimeout(()=>{ beginFirstQuestion(); }, Math.max(200, remaining+150));
       } else if(S.questionTimer){
         clearTimeout(S.questionTimer); S.questionTimer=null;
@@ -1140,18 +1167,18 @@
     if(!S.game || S.game.status!=='lobby' || S.starting) return;
     S.starting = true;
     try{
-      await S.db.doc('games/'+S.code).update({ status:'countdown', currentIndex:0, countdownStartedAt:Date.now(), scheduledStartAt:null });
+      await S.db.doc('games/'+S.code).update({ status:'countdown', currentIndex:0, countdownStartedAt:nowSrv(), scheduledStartAt:null });
     } finally { S.starting = false; }
   }
   async function beginFirstQuestion(){
     if(!S.game || S.game.status!=='countdown') return;
-    await S.db.doc('games/'+S.code).update({ status:'question', currentIndex:0, questionStartedAt:Date.now() });
+    await S.db.doc('games/'+S.code).update({ status:'question', currentIndex:0, questionStartedAt:nowSrv() });
   }
   async function setSchedule(mins){
     mins = Math.floor(Number(mins));
     if(!(mins>=1)) { alert('ใส่จำนวนนาทีตั้งแต่ 1 ขึ้นไป'); return; }
     mins = Math.min(mins, 720);
-    await S.db.doc('games/'+S.code).update({ scheduledStartAt: Date.now() + mins*60000 });
+    await S.db.doc('games/'+S.code).update({ scheduledStartAt: nowSrv() + mins*60000 });
   }
   async function cancelSchedule(){
     await S.db.doc('games/'+S.code).update({ scheduledStartAt: null });
@@ -1164,14 +1191,14 @@
   }
   async function revealCurrent(){
     if(!S.game || S.game.status!=='question') return;
-    await S.db.doc('games/'+S.code).update({ status:'reveal', revealStartedAt:Date.now() });
+    await S.db.doc('games/'+S.code).update({ status:'reveal', revealStartedAt:nowSrv() });
   }
   async function nextQuestion(){
     const nextIdx = S.game.currentIndex+1;
     if(nextIdx >= S.game.questions.length){
       await S.db.doc('games/'+S.code).update({ status:'ended' });
     } else {
-      await S.db.doc('games/'+S.code).update({ status:'question', currentIndex:nextIdx, questionStartedAt:Date.now() });
+      await S.db.doc('games/'+S.code).update({ status:'question', currentIndex:nextIdx, questionStartedAt:nowSrv() });
     }
   }
 
@@ -1250,13 +1277,14 @@
     history.replaceState(null,'','?room='+code);
     subscribeToGame(code);
     S.screen='player-play'; render();
+    syncClock();
   }
 
   async function submitAnswer(ci){
     if(!S.game || S.game.status!=='question' || S.myLastAnswer) return;
     const idx = S.game.currentIndex;
     const q = S.game.questions[idx];
-    const now = Date.now();
+    const now = nowSrv();
     const limitMs = (q.timeLimitSec||20)*1000;
     const elapsed = now - (S.game.questionStartedAt||now);
     const correct = ci === q.correctIndex;
@@ -1295,7 +1323,7 @@
 
   function timerFillStyle(q, startedAt){
     const limitMs=(q.timeLimitSec||20)*1000;
-    const remain = Math.max(0, limitMs - (Date.now()-(startedAt||Date.now())));
+    const remain = Math.max(0, limitMs - (nowSrv()-(startedAt||nowSrv())));
     const pct = Math.max(0, Math.min(100, remain/limitMs*100));
     return { pct, secsLeft: Math.ceil(remain/1000) };
   }
