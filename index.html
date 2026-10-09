@@ -834,6 +834,7 @@
   }
 
   function goHome(){
+    clearSession();
     clearSubs();
     S.screen='home'; S.code=null; S.isHost=false; S.game=null;
     S.playersDocs=[]; S.answersDocs=[]; S.myLastAnswer=null; S.joinError='';
@@ -863,10 +864,63 @@
     }catch(e){ console.error(e); S.dbState='unavailable'; render(); }
   }
 
+  // ---------- coming back after a refresh / crash ----------
+  // The room code + role are remembered on this device while a game is running, so reloading the page
+  // (or reopening the tab after the phone froze) drops the player/host straight back into the same game.
+  function saveSession(o){ lsSet('qa_session', JSON.stringify(o)); }
+  function loadSession(){ try{ return JSON.parse(lsGet('qa_session','null')); }catch(e){ return null; } }
+  function clearSession(){ try{ localStorage.removeItem('qa_session'); }catch(e){} }
+
+  async function loadQuestionsFor(code, data){
+    if(data.questions) return data.questions;
+    const qsnap = await S.db.collection('games/'+code+'/questions').get();
+    const loaded = qsnap.docs.map(d=>d.data()).sort((a,b)=>a.i-b.i);
+    if(!loaded.length || (data.qCount && loaded.length!==data.qCount)) throw new Error('questions_missing');
+    return loaded;
+  }
+
+  async function tryResume(code){
+    const sess = loadSession();
+    if(!sess || sess.code!==code || !S.db) return false;
+    try{
+      const snap = await S.db.doc('games/'+code).get();
+      if(!snap.exists){ clearSession(); return false; }
+      const data = snap.data();
+      const questions = await loadQuestionsFor(code, data);
+      if(sess.role!=='host'){
+        const me = await S.db.doc('games/'+code+'/players/'+S.playerId).get();
+        if(!me.exists) return false;               // never joined this room -> normal join screen
+        S.playerName = (me.data().name) || sess.name || '';
+      }
+      S.quizQuestions = questions; S.code = code; S.isHost = (sess.role==='host');
+      S.game = Object.assign({}, data, { questions });
+      subscribeToGame(code);
+      S.screen = S.isHost ? 'host-play' : 'player-play';
+      syncClock();
+      return true;
+    }catch(e){
+      console.warn('resume failed', e);
+      S.code = null; S.game = null; S.isHost = false;
+      return false;
+    }
+  }
+
+  function renderResuming(){
+    const app = document.getElementById('app'); app.innerHTML='';
+    app.appendChild(el('<div class="card center-text"><div style="font-size:40px;margin:10px 0;">🔄</div><h2 style="margin:0 0 6px;">กำลังกลับเข้าเกม...</h2><p class="muted">รอสักครู่ ข้อมูลของคุณยังอยู่ครบ</p></div>'));
+    renderTopbar();
+  }
+
   function maybeAutoJoinFromUrl(){
     const params = new URLSearchParams(location.search);
     const c = (params.get('room')||'').toUpperCase().replace(/[^A-Z0-9]/g,'');
-    if(c){ S.joinCodeInput=c; S.screen='join'; }
+    if(!c) return;
+    S.joinCodeInput = c; S.screen = 'join';
+    const sess = loadSession();
+    if(sess && sess.code===c){
+      S.screen = 'resuming';
+      tryResume(c).then(ok=>{ if(!ok) S.screen = 'join'; render(); });
+    }
   }
 
   // ---------- scoring derivation ----------
@@ -1201,6 +1255,7 @@
     await S.db.doc('games/'+code).set(gameData);
     S.quizQuestions = questions;
     S.code=code; S.isHost=true; S.game=Object.assign({}, gameData, { questions });
+    saveSession({ role:'host', code });
     syncClock();
     history.replaceState(null,'','?room='+code);
     subscribeToGame(code);
@@ -1389,10 +1444,19 @@
     const snap = await S.db.doc('games/'+code).get();
     if(!snap.exists){ S.joinError='ไม่พบห้องนี้ ตรวจสอบรหัสอีกครั้ง'; render(); return; }
     const data = snap.data();
-    if(data.status !== 'lobby'){ S.joinError='ห้องนี้เริ่มเล่นไปแล้ว ขอรหัสห้องใหม่จากเจ้าของเกม'; render(); return; }
+    let rejoining = false;
+    if(data.status !== 'lobby'){
+      // a game already under way: only players who were already in it may come back (same device)
+      const mine = await S.db.doc('games/'+code+'/players/'+S.playerId).get();
+      if(!mine.exists){ S.joinError='ห้องนี้เริ่มเล่นไปแล้ว ขอรหัสห้องใหม่จากเจ้าของเกม'; render(); return; }
+      rejoining = true;
+      S.playerName = mine.data().name || name;
+    }
     lsSet('qa_name', name);
-    S.playerName = name; S.code=code; S.isHost=false; S.joinError='';
-    await S.db.doc('games/'+code+'/players/'+S.playerId).set({ name, joinedAt:Date.now(), avatarEmoji:S.avatarEmoji, avatarColor:S.avatarColor });
+    if(!rejoining) S.playerName = name;
+    S.code=code; S.isHost=false; S.joinError='';
+    if(!rejoining) await S.db.doc('games/'+code+'/players/'+S.playerId).set({ name, joinedAt:Date.now(), avatarEmoji:S.avatarEmoji, avatarColor:S.avatarColor });
+    saveSession({ role:'player', code, name:S.playerName });
     // download the questions once; from here on only the small live-state document is followed
     if(data.questions){ S.quizQuestions = data.questions; }
     else{
@@ -1815,6 +1879,7 @@
       case 'host-play': renderHostPlay(); break;
       case 'join': renderJoin(); break;
       case 'player-play': renderPlayerPlay(); break;
+      case 'resuming': renderResuming(); break;
       default: renderHome();
     }
     document.body.classList.toggle('q-active', (S.screen==='host-play' || S.screen==='player-play') && !!S.game && S.game.status==='question');
