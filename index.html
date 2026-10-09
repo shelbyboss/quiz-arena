@@ -1189,7 +1189,15 @@
       qCount: questions.length,
       createdAt: Date.now(),
     };
-    await S.db.doc('games/'+code+'/content/quiz').set({ questions });
+    // one small document per question (each is far below Firestore's 1 MB document limit even with pictures)
+    for(let start=0; start<questions.length; start+=400){
+      const batch = S.db.batch();
+      questions.slice(start, start+400).forEach((q,k)=>{
+        const i = start+k;
+        batch.set(S.db.doc('games/'+code+'/questions/'+String(i).padStart(4,'0')), Object.assign({ i }, q));
+      });
+      await batch.commit();
+    }
     await S.db.doc('games/'+code).set(gameData);
     S.quizQuestions = questions;
     S.code=code; S.isHost=true; S.game=Object.assign({}, gameData, { questions });
@@ -1388,9 +1396,10 @@
     // download the questions once; from here on only the small live-state document is followed
     if(data.questions){ S.quizQuestions = data.questions; }
     else{
-      const qsnap = await S.db.doc('games/'+code+'/content/quiz').get();
-      if(!qsnap.exists){ S.joinError='โหลดคำถามของห้องนี้ไม่ได้ ลองใหม่อีกครั้ง'; render(); return; }
-      S.quizQuestions = qsnap.data().questions;
+      const qsnap = await S.db.collection('games/'+code+'/questions').get();
+      const loaded = qsnap.docs.map(d=>d.data()).sort((a,b)=>a.i-b.i);
+      if(!loaded.length || (data.qCount && loaded.length!==data.qCount)){ S.joinError='โหลดคำถามของห้องนี้ไม่ได้ ลองใหม่อีกครั้ง'; render(); return; }
+      S.quizQuestions = loaded;
     }
     S.game = Object.assign({}, data, { questions: S.quizQuestions });
     history.replaceState(null,'','?room='+code);
@@ -1792,7 +1801,10 @@
   function scheduleRender(){
     if(renderQueued) return;
     renderQueued = true;
-    requestAnimationFrame(()=>{ renderQueued = false; render(); });
+    // animation frames don't fire in a hidden tab, so a short timer is the fallback; whichever runs first wins
+    const run = ()=>{ if(!renderQueued) return; renderQueued = false; render(); };
+    requestAnimationFrame(run);
+    setTimeout(run, 120);
   }
 
   // ================= MASTER RENDER =================
