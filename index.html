@@ -25,7 +25,6 @@
     background-image:
       radial-gradient(circle at 15% 8%, rgba(150,120,255,.22), transparent 48%),
       radial-gradient(circle at 90% 85%, rgba(255,111,177,.16), transparent 42%);
-    background-attachment:fixed;
   }
   h1,h2,h3,.display{ font-family:'Kanit',system-ui,sans-serif; letter-spacing:.2px; }
   button{font-family:inherit;}
@@ -307,8 +306,8 @@
   function audioCtx(){
     try{
       if(!AC) AC = new (window.AudioContext||window.webkitAudioContext)();
-      if(AC.state==='suspended') AC.resume();
-      if(!samplesRequested){ samplesRequested = true; loadSample('applause','applause.mp3'); }
+      if(AC.state!=='running') AC.resume();
+      if(!samplesRequested){ samplesRequested = true; loadSample('applause','applause.mp3'); setTimeout(prefetchLoops, 1200); }
     }catch(e){ AC=null; }
     return AC;
   }
@@ -421,8 +420,9 @@
     }
     return MUSIC.noise;
   }
+  let TGT = null;   // when set, music helpers draw into this (offline) context instead of the live one
   function mTone(freq, t, dur, type, vol){
-    const a = AC;
+    const a = TGT || AC;
     const o = a.createOscillator(), g = a.createGain();
     o.type = type; o.frequency.setValueAtTime(freq, t);
     g.gain.setValueAtTime(0.0001, t);
@@ -432,7 +432,7 @@
     o.start(t); o.stop(t+dur+0.02);
   }
   function mKick(t){
-    const a = AC, o = a.createOscillator(), g = a.createGain();
+    const a = TGT || AC, o = a.createOscillator(), g = a.createGain();
     o.type = 'sine';
     o.frequency.setValueAtTime(160, t);
     o.frequency.exponentialRampToValueAtTime(42, t+0.12);
@@ -442,7 +442,7 @@
     o.start(t); o.stop(t+0.22);
   }
   function mNoise(t, dur, vol, hpFreq){
-    const a = AC, s = a.createBufferSource(), f = a.createBiquadFilter(), g = a.createGain();
+    const a = TGT || AC, s = a.createBufferSource(), f = a.createBiquadFilter(), g = a.createGain();
     s.buffer = noiseBuffer(a);
     f.type = 'highpass'; f.frequency.value = hpFreq;
     g.gain.setValueAtTime(vol, t);
@@ -495,22 +495,24 @@
     });
   }
 
-  function scheduleStep(step, t){
+  function scheduleStep(step, t, mode, urgent, bpm){
+    mode = mode || MUSIC.mode; bpm = bpm || MUSIC.bpm;
+    if(urgent===undefined) urgent = MUSIC.urgent;
     const chord = CHORDS[Math.floor(step/8)%4];
-    const stepDur = 60/MUSIC.bpm/4;
-    if(MUSIC.mode==='question'){
-      const u = MUSIC.urgent;
+    const stepDur = 60/bpm/4;
+    if(mode==='question'){
+      const u = urgent;
       if(u ? step%2===0 : step%4===0) mKick(t);
       if(u ? true : step%4===2) mNoise(t, 0.04, u ? 0.16 : 0.12, 7000);
       if(step%8===4 || (u && step%4===2)) mNoise(t, 0.12, 0.34, 1800);
       if(step%2===0) mTone(chord.root*(u?2:1), t, stepDur*1.6, 'sawtooth', u ? 0.12 : 0.09);
       const arpNote = chord.arp[[0,1,2,1][step%4]] * ((u || step%16>=8) ? 2 : 1);
       mTone(arpNote, t, stepDur*0.9, 'square', u ? 0.05 : 0.03);
-    } else if(MUSIC.mode==='lobby'){
+    } else if(mode==='lobby'){
       if(step%8===0) mTone(chord.root*2, t, stepDur*3, 'triangle', 0.08);
       if(step%2===0) mTone(chord.arp[[0,1,2,1][(step/2)%4]], t, stepDur*1.8, 'triangle', 0.04);
       if(step%8===4) mNoise(t, 0.04, 0.05, 8000);
-    } else if(MUSIC.mode==='victory'){
+    } else if(mode==='victory'){
       // bright major-key celebration groove (C - G - Am - F)
       const vc = VICTORY_CHORDS[Math.floor(step/8)%4];
       if(step%4===0) mKick(t);
@@ -521,21 +523,94 @@
       if(step%16===0) mTone(vc.arp[2]*2, t, stepDur*3, 'sine', 0.06);
     }
   }
+  // Fallback only: live note-by-note scheduler (creates many audio nodes — used if offline rendering is unavailable)
   function musicTick(){
     const a = AC;
     if(!a || muted || !MUSIC.mode) return;
+    // if the page was throttled (phone locked / tab hidden) don't replay the missed minutes in one burst
+    if(MUSIC.nextTime < a.currentTime - 0.1) MUSIC.nextTime = a.currentTime + 0.05;
     while(MUSIC.nextTime < a.currentTime + 0.15){
       scheduleStep(MUSIC.step, MUSIC.nextTime);
       MUSIC.nextTime += 60/MUSIC.bpm/4;
       MUSIC.step = (MUSIC.step+1)%32;
     }
   }
-  function applyMusic(){
-    if(MUSIC.timer){ clearInterval(MUSIC.timer); MUSIC.timer = null; }
-    if(!MUSIC.mode || muted) return;
-    const a = audioCtx(); if(!a) return;
+  function liveStart(){
+    const a = AC; if(!a) return;
     MUSIC.step = 0; MUSIC.nextTime = a.currentTime + 0.05;
     MUSIC.timer = setInterval(musicTick, 25);
+  }
+
+  // Preferred path: render each 2-bar loop ONCE into an AudioBuffer (offline), then loop a single
+  // AudioBufferSourceNode. Playing music this way costs ~1 audio node for the whole question instead of
+  // ~100 per second, which is what made iPhones slow down and freeze after ~25 questions.
+  const LOOPS = {};   // 'question' | 'question:u' | 'lobby' | 'victory' -> {buf} | {pending:true} | null (failed)
+  function loopBpm(mode){ return mode==='question' ? 132 : mode==='victory' ? 118 : 100; }
+  function loopKey(mode, urgent){ return mode + (mode==='question' && urgent ? ':u' : ''); }
+  function renderLoop(mode, urgent){
+    const a = AC, OAC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+    if(!a || !OAC) return Promise.resolve(null);
+    try{
+      const bpm = loopBpm(mode), stepDur = 60/bpm/4, loopSec = 32*stepDur, tail = 0.7, sr = a.sampleRate;
+      const off = new OAC(1, Math.ceil((loopSec+tail)*sr), sr);
+      TGT = off;
+      try{ for(let s=0;s<32;s++) scheduleStep(s, s*stepDur, mode, urgent, bpm); } finally { TGT = null; }
+      const done = new Promise(res=>{ off.oncomplete = e=>res(e.renderedBuffer); });
+      const p = off.startRendering();
+      return (p && p.then ? p : done).then(rb=>{
+        const n = Math.floor(loopSec*sr), out = a.createBuffer(1, n, sr);
+        const src = rb.getChannelData(0), dst = out.getChannelData(0);
+        for(let i=0;i<n;i++) dst[i] = src[i] + (i+n < src.length ? src[i+n] : 0);   // fold the tail onto the start = seamless loop
+        return out;
+      }).catch(()=>null);
+    }catch(e){ TGT = null; return Promise.resolve(null); }
+  }
+  function ensureLoop(mode, urgent){
+    const key = loopKey(mode, urgent);
+    if(key in LOOPS) return;
+    LOOPS[key] = { pending:true };
+    renderLoop(mode, urgent).then(buf=>{
+      LOOPS[key] = buf ? { buf } : null;
+      // if this loop is the one we're waiting for, start it now
+      if(MUSIC.mode===mode && loopKey(MUSIC.mode, MUSIC.urgent)===key && !muted && !MUSIC.loop && !MUSIC.timer && !MUSIC.waiting) applyMusic();
+    });
+  }
+  function prefetchLoops(){
+    ['lobby','question','question:u','victory'].forEach((k,i)=>{
+      setTimeout(()=>{ const [m,u] = k.split(':'); ensureLoop(m, !!u); }, i*600);
+    });
+  }
+  function stopLoop(fade){
+    const l = MUSIC.loop; MUSIC.loop = null;
+    if(!l || !AC) return;
+    try{
+      const t = AC.currentTime, f = fade || 0.08;
+      l.g.gain.cancelScheduledValues(t);
+      l.g.gain.setValueAtTime(l.g.gain.value, t);
+      l.g.gain.linearRampToValueAtTime(0.0001, t+f);
+      l.src.stop(t+f+0.02);
+    }catch(e){}
+  }
+  function playLoop(buf){
+    const a = AC, src = a.createBufferSource(), g = a.createGain();
+    src.buffer = buf; src.loop = true;
+    src.playbackRate.value = MUSIC.bpm / loopBpm(MUSIC.mode);
+    g.gain.setValueAtTime(0.0001, a.currentTime);
+    g.gain.linearRampToValueAtTime(0.9, a.currentTime+0.12);
+    src.connect(g); g.connect(a.destination);
+    src.start();
+    MUSIC.loop = { src, g };
+  }
+  function applyMusic(){
+    if(MUSIC.timer){ clearInterval(MUSIC.timer); MUSIC.timer = null; }
+    stopLoop(0.05);
+    if(!MUSIC.mode || muted) return;
+    const a = audioCtx(); if(!a) return;
+    const key = loopKey(MUSIC.mode, MUSIC.urgent);
+    const entry = LOOPS[key];
+    if(entry && entry.buf){ playLoop(entry.buf); return; }
+    if(entry === null){ liveStart(); return; }          // offline rendering failed -> old live scheduler
+    ensureLoop(MUSIC.mode, MUSIC.urgent);              // not ready yet: starts itself when rendered
   }
   function setMusic(mode){
     if(MUSIC.mode===mode) return;
@@ -544,10 +619,13 @@
     MUSIC.bpm = mode==='question' ? 132 : mode==='victory' ? 118 : 100;
     MUSIC.urgent = false;
     if(mode!=='question'){ stopRiser(); document.body.classList.remove('urgent'); }
+    MUSIC.waiting = false;
     if(mode==='victory'){
       // let the fanfare and applause play first, then bring the groove in
       if(MUSIC.timer){ clearInterval(MUSIC.timer); MUSIC.timer = null; }
-      MUSIC.startTimer = setTimeout(()=>{ if(MUSIC.mode==='victory') applyMusic(); }, 3000);
+      stopLoop(0.1);
+      MUSIC.waiting = true;
+      MUSIC.startTimer = setTimeout(()=>{ MUSIC.waiting = false; if(MUSIC.mode==='victory') applyMusic(); }, 3000);
       return;
     }
     applyMusic();
@@ -578,10 +656,20 @@
 
   // Builds the image DOM ONCE (per real render); applyImageReveal() then updates it live
   // on each timer tick without touching the rest of the screen, so nothing flickers/reloads.
+  // The picture is built once per question and reused across re-renders, so the browser doesn't have to
+  // re-decode a large image every time a player answers (that re-decode is a big cause of phone lag).
+  let imgCache = { key:'', ref:null };
   function buildQuestionImage(q){
     if(!q || !q.imageUrl || !q.imageUrl.trim()) return null;
     const mode = q.revealMode || 'blur';
-    const img = el('<img class="q-image" src="'+esc(q.imageUrl.trim())+'" alt="" loading="lazy">');
+    const cacheKey = mode+'|'+q.imageUrl.trim();
+    if(imgCache.ref && imgCache.key===cacheKey) return imgCache.ref;
+    const ref = makeQuestionImage(q, mode);
+    imgCache = { key:cacheKey, ref };
+    return ref;
+  }
+  function makeQuestionImage(q, mode){
+    const img = el('<img class="q-image" src="'+esc(q.imageUrl.trim())+'" alt="" decoding="async">');
 
     if(mode==='tiles'){
       const wrap = el('<div class="q-image-wrap"></div>');
@@ -627,9 +715,12 @@
       if(t.imgRef) applyImageReveal(t.imgRef, 1-pct/100);
       const tickKey = S.code+':'+(S.game?S.game.currentIndex:'')+':'+secsLeft;
       const urgent = secsLeft>0 && secsLeft<=5;
+      const wasUrgent = MUSIC.urgent;
       MUSIC.urgent = urgent;
       if(MUSIC.mode==='question'){
         MUSIC.bpm = !urgent ? 132 : ({5:148,4:158,3:170,2:185,1:200})[secsLeft];
+        if(wasUrgent!==urgent) applyMusic();                                   // swap to the denser "urgent" loop
+        else if(MUSIC.loop && AC) MUSIC.loop.src.playbackRate.setTargetAtTime(MUSIC.bpm/132, AC.currentTime, 0.05);   // speed up
       }
       document.body.classList.toggle('urgent', urgent);
       if(urgent){
@@ -763,6 +854,9 @@
       }
       firebase.initializeApp(window.__FIREBASE_CONFIG__);
       S.db = firebase.firestore();
+      // Some phone browsers / mobile networks buffer Firestore's streaming connection, so updates (like
+      // "next question") arrive late in clumps. Auto-detect that and fall back to long polling.
+      try{ S.db.settings({ experimentalAutoDetectLongPolling:true, merge:true }); }catch(e){ console.warn('firestore settings', e); }
       S.dbState='ready';
       maybeAutoJoinFromUrl();
       render();
@@ -777,6 +871,10 @@
 
   // ---------- scoring derivation ----------
   function scoreboard(){
+    // Players don't download every answer in the room; the host publishes a ready-made board at each reveal.
+    if(!S.isHost && S.game && Array.isArray(S.game.board)){
+      return S.game.board.map(r=>({ id:r.id, name:r.name, score:r.score, avatarEmoji:r.e, avatarColor:r.c }));
+    }
     const totals = {};
     S.answersDocs.forEach(a=>{ totals[a.playerId] = (totals[a.playerId]||0) + (a.points||0); });
     const rows = S.playersDocs.map(p=>({ id:p.id, name:p.name, score: totals[p.id]||0, avatarEmoji:p.avatarEmoji, avatarColor:p.avatarColor }));
@@ -1081,14 +1179,20 @@
       if(!snap.exists){ code=candidate; break; }
     }
     if(!code){ alert('สร้างห้องไม่สำเร็จ ลองอีกครั้ง'); return; }
+    const questions = S.questions.map(q=>({ text:q.text, choices: q.mode==='two' ? q.choices.slice(0,2) : q.choices, correctIndex:q.correctIndex, timeLimitSec:q.timeLimitSec, imageUrl:(q.imageUrl||'').trim(), revealMode:q.revealMode||'blur' }));
+    // The questions (and pictures) are big and never change, so they live in their own document that each
+    // device downloads once. The "game" document only carries small live state, because Firestore re-sends
+    // the WHOLE document to every device on each change.
     const gameData = {
       title: S.quizTitle || 'ควิซไม่มีชื่อ',
       status:'lobby', currentIndex:0, questionStartedAt:null, revealStartedAt:null, autoAdvance:!!S.autoAdvance,
-      questions: S.questions.map(q=>({ text:q.text, choices: q.mode==='two' ? q.choices.slice(0,2) : q.choices, correctIndex:q.correctIndex, timeLimitSec:q.timeLimitSec, imageUrl:(q.imageUrl||'').trim(), revealMode:q.revealMode||'blur' })),
+      qCount: questions.length,
       createdAt: Date.now(),
     };
+    await S.db.doc('games/'+code+'/content/quiz').set({ questions });
     await S.db.doc('games/'+code).set(gameData);
-    S.code=code; S.isHost=true; S.game=gameData;
+    S.quizQuestions = questions;
+    S.code=code; S.isHost=true; S.game=Object.assign({}, gameData, { questions });
     syncClock();
     history.replaceState(null,'','?room='+code);
     subscribeToGame(code);
@@ -1099,23 +1203,28 @@
   function subscribeToGame(code){
     clearSubs();
     const uGame = S.db.doc('games/'+code).onSnapshot(snap=>{
-      if(!snap.exists){ S.game=null; render(); return; }
-      S.game = snap.data();
+      if(!snap.exists){ S.game=null; scheduleRender(); return; }
+      const d = snap.data();
+      S.game = d.questions ? d : Object.assign({}, d, { questions: S.quizQuestions || [] });
       onGameChanged();
-      render();
+      scheduleRender();
     }, err=>{ console.error(err); });
-    const uPlayers = S.db.collection('games/'+code+'/players').onSnapshot(qs=>{
+    // Only the host needs the full player list and every answer. Phones just follow the small game
+    // document plus their own answers, which keeps 30 players well inside Firestore's free read quota.
+    const uPlayers = !S.isHost ? null : S.db.collection('games/'+code+'/players').onSnapshot(qs=>{
       const prevCount = S.playersDocs.length;
       S.playersDocs = qs.docs.map(d=>({ id:d.id, ...d.data() }));
-      if(S.isHost && S.game && S.game.status==='lobby' && S.playersDocs.length>prevCount) SFX.join();
-      render();
+      if(S.game && S.game.status==='lobby' && S.playersDocs.length>prevCount) SFX.join();
+      scheduleRender();
     }, err=>{ console.error(err); });
-    const uAnswers = S.db.collection('games/'+code+'/answers').onSnapshot(qs=>{
+    const answersRef = S.db.collection('games/'+code+'/answers');
+    const uAnswers = (S.isHost ? answersRef : answersRef.where('playerId','==',S.playerId)).onSnapshot(qs=>{
       S.answersDocs = qs.docs.map(d=>({ id:d.id, ...d.data() }));
       S.myLastAnswer = S.answersDocs.find(a=> a.playerId===S.playerId && a.qIndex===(S.game?S.game.currentIndex:-1)) || null;
-      render();
+      scheduleRender();
     }, err=>{ console.error(err); });
-    S.subs.push(uGame, uPlayers, uAnswers);
+    S.subs.push(uGame, uAnswers);
+    if(uPlayers) S.subs.push(uPlayers);
   }
 
   function onGameChanged(){
@@ -1191,12 +1300,15 @@
   }
   async function revealCurrent(){
     if(!S.game || S.game.status!=='question') return;
-    await S.db.doc('games/'+S.code).update({ status:'reveal', revealStartedAt:nowSrv() });
+    await S.db.doc('games/'+S.code).update({ status:'reveal', revealStartedAt:nowSrv(), board:boardPayload() });
+  }
+  function boardPayload(){
+    return scoreboard().map(r=>({ id:r.id, name:r.name, score:r.score, e:r.avatarEmoji||'', c:r.avatarColor||'' }));
   }
   async function nextQuestion(){
     const nextIdx = S.game.currentIndex+1;
     if(nextIdx >= S.game.questions.length){
-      await S.db.doc('games/'+S.code).update({ status:'ended' });
+      await S.db.doc('games/'+S.code).update({ status:'ended', board:boardPayload() });
     } else {
       await S.db.doc('games/'+S.code).update({ status:'question', currentIndex:nextIdx, questionStartedAt:nowSrv() });
     }
@@ -1273,7 +1385,14 @@
     lsSet('qa_name', name);
     S.playerName = name; S.code=code; S.isHost=false; S.joinError='';
     await S.db.doc('games/'+code+'/players/'+S.playerId).set({ name, joinedAt:Date.now(), avatarEmoji:S.avatarEmoji, avatarColor:S.avatarColor });
-    S.game = data;
+    // download the questions once; from here on only the small live-state document is followed
+    if(data.questions){ S.quizQuestions = data.questions; }
+    else{
+      const qsnap = await S.db.doc('games/'+code+'/content/quiz').get();
+      if(!qsnap.exists){ S.joinError='โหลดคำถามของห้องนี้ไม่ได้ ลองใหม่อีกครั้ง'; render(); return; }
+      S.quizQuestions = qsnap.data().questions;
+    }
+    S.game = Object.assign({}, data, { questions: S.quizQuestions });
     history.replaceState(null,'','?room='+code);
     subscribeToGame(code);
     S.screen='player-play'; render();
@@ -1286,11 +1405,14 @@
     const q = S.game.questions[idx];
     const now = nowSrv();
     const limitMs = (q.timeLimitSec||20)*1000;
-    const elapsed = now - (S.game.questionStartedAt||now);
+    // If the question reached this screen late (slow network/phone), don't charge that wait against the
+    // player's speed points — measure from when they could first see it (capped at 4s).
+    const lagMs = Math.min(4000, S.qShownLag||0);
+    const elapsed = Math.max(0, now - (S.game.questionStartedAt||now) - (lagMs>600 ? lagMs : 0));
     const correct = ci === q.correctIndex;
     const frac = Math.max(0, Math.min(1, 1 - elapsed/limitMs));
     const points = correct ? Math.round(500 + 500*frac) : 0;
-    S.myLastAnswer = { qIndex:idx, playerId:S.playerId, choiceIndex:ci, correct, points, answeredAtMs:now };
+    S.myLastAnswer = { qIndex:idx, playerId:S.playerId, choiceIndex:ci, correct, points, answeredAtMs:now, lagMs: Math.round(S.qShownLag||0) };
     SFX.click();
     render();
     await S.db.doc('games/'+S.code+'/answers/'+idx+'_'+S.playerId).set(S.myLastAnswer);
@@ -1521,6 +1643,8 @@
     else if(g.status==='question'){
       const q = g.questions[g.currentIndex];
       const {pct, secsLeft} = timerFillStyle(q, g.questionStartedAt);
+      const shownKey = S.code+':'+g.currentIndex;
+      if(S.qShownKey!==shownKey){ S.qShownKey = shownKey; S.qShownLag = Math.max(0, nowSrv() - (g.questionStartedAt||nowSrv())); }
       const card = el('<div class="card"></div>');
       card.appendChild(el('<div class="qn-tag">คำถามที่ '+(g.currentIndex+1)+' / '+g.questions.length+'</div>'));
       const imgRef = buildQuestionImage(q);
@@ -1660,6 +1784,15 @@
     app.appendChild(col);
     app.appendChild(el('<div class="footer-note">Quiz Arena · เล่นฟรี ไม่ต้องล็อกอิน</div>'));
     renderTopbar();
+  }
+
+  // Several snapshots often land in the same moment (e.g. 10 players answering together). Rebuilding the
+  // whole screen for each one is what makes phones stutter, so coalesce them into one render per frame.
+  let renderQueued = false;
+  function scheduleRender(){
+    if(renderQueued) return;
+    renderQueued = true;
+    requestAnimationFrame(()=>{ renderQueued = false; render(); });
   }
 
   // ================= MASTER RENDER =================
