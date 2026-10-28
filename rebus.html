@@ -1,0 +1,1018 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>ตู้ทายคำจากภาพ</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Mitr:wght@400;600&family=IBM+Plex+Sans+Thai:wght@400;600&family=Chakra+Petch:wght@600;700&display=swap">
+<style>
+/* Layout: game-show stage — slot machine centred on a rotating sunburst; home = join card + host card; in a room the host gets a setup tab + answer feed, players get a guess box */
+:root {
+  color-scheme: dark;
+  --night: #241046;
+  --ray: #3a1a6e;
+  --gold: #f6b93b;
+  --gold-deep: #c97a12;
+  --red: #d7263d;
+  --red-deep: #8e1023;
+  --window: #fbf8f2;
+  --ink: #1d1530;
+  --paper: #fff6e6;
+  --muted: #b9a8d9;
+  --panel: #2f1859;
+  --line: #4b2f84;
+  --ok: #3ddc97;
+  --bad: #ff8a9a;
+  --font-display: "Mitr", "Leelawadee UI", "Tahoma", sans-serif;
+  --font-body: "IBM Plex Sans Thai", "Leelawadee UI", "Tahoma", sans-serif;
+  --font-num: "Chakra Petch", "Mitr", sans-serif;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body { background: var(--night); color: var(--paper); font-family: var(--font-body); font-size: 15px; line-height: 1.55; overflow-x: hidden; }
+[hidden] { display: none !important; }
+img { max-width: 100%; }
+.sunburst { position: fixed; inset: -50vmax; z-index: 0; pointer-events: none;
+  background: repeating-conic-gradient(from 0deg, var(--ray) 0deg 9deg, var(--night) 9deg 18deg);
+  -webkit-mask: radial-gradient(circle at center, #000 0%, transparent 62%); mask: radial-gradient(circle at center, #000 0%, transparent 62%);
+  animation: turn 90s linear infinite; }
+@keyframes turn { to { transform: rotate(360deg); } }
+
+.app { position: relative; z-index: 1; min-height: 100%; display: flex; flex-direction: column;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-top: calc(12px + env(safe-area-inset-top, 0px)); padding-bottom: calc(28px + env(safe-area-inset-bottom, 0px)); }
+
+.topbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; max-width: 1080px; width: 100%; margin: 0 auto; }
+.brand { font-family: var(--font-display); font-weight: 600; font-size: 18px; color: var(--gold); margin-right: auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.role { font: 700 11px var(--font-num); letter-spacing: .14em; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); }
+.role.host { background: var(--red); border-color: var(--red); color: #fff3d6; }
+.roomcode { font: 700 15px var(--font-num); letter-spacing: .18em; color: var(--paper); background: rgba(0,0,0,.3); border: 1px solid var(--gold); border-radius: 10px; padding: 3px 10px; }
+.tabs { display: inline-flex; background: rgba(0,0,0,.28); border: 1px solid var(--line); border-radius: 999px; padding: 3px; }
+.tabs button { font: 600 14px var(--font-display); color: var(--muted); background: none; border: 0; padding: 6px 16px; border-radius: 999px; cursor: pointer; }
+.tabs button[aria-selected="true"] { background: var(--gold); color: var(--ink); }
+.iconbtn { font: 600 13px var(--font-display); color: var(--paper); background: rgba(0,0,0,.28); border: 1px solid var(--line); border-radius: 999px; padding: 6px 12px; cursor: pointer; }
+button:focus-visible, input:focus-visible, .drop:focus-visible { outline: 3px solid var(--ok); outline-offset: 2px; }
+
+.banner { max-width: 640px; margin: 60px auto 0; text-align: center; background: rgba(0,0,0,.35); border: 1px solid var(--line); border-radius: 18px; padding: 22px; }
+.banner h2 { font: 600 24px var(--font-display); color: var(--gold); margin: 0 0 6px; text-wrap: balance; }
+.banner p { margin: 0; color: var(--muted); }
+
+/* home */
+.home { max-width: 880px; width: 100%; margin: 36px auto 0; display: flex; flex-direction: column; gap: 22px; }
+.hero { text-align: center; }
+.hero h1 { font: 600 clamp(34px, 7vw, 60px)/1.1 var(--font-display); color: var(--gold); margin: 0; text-shadow: 0 4px 0 var(--red-deep); text-wrap: balance; }
+.hero p { color: var(--muted); margin: 8px 0 0; }
+.home-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
+.home .card { padding: 20px; gap: 12px; }
+.codeinput { font: 700 28px var(--font-num) !important; letter-spacing: .3em; text-transform: uppercase; text-align: center; }
+.err { color: var(--bad); font-size: 14px; margin: 0; }
+.rooms { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.rooms li { display: flex; gap: 8px; align-items: center; background: rgba(255,255,255,.04); border-radius: 10px; padding: 6px 8px; }
+.rooms li span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rooms li b { font: 700 14px var(--font-num); letter-spacing: .12em; color: var(--gold); }
+
+/* stage */
+.stage { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 18px; padding-top: 28px; }
+.progress { font-family: var(--font-num); font-weight: 700; letter-spacing: .08em; color: var(--muted); font-size: 14px; text-align: center; }
+.progress b { color: var(--paper); }
+.machine { position: relative; width: min(100%, 860px); padding: 46px clamp(14px, 3vw, 30px) 26px;
+  background: linear-gradient(180deg, #ffd36b 0%, var(--gold) 38%, var(--gold-deep) 100%);
+  border-radius: 34px; box-shadow: 0 0 0 4px var(--gold-deep), 0 24px 60px rgba(0,0,0,.55), inset 0 3px 0 rgba(255,255,255,.55); }
+.plaque { position: absolute; left: 50%; top: 0; transform: translate(-50%, -52%); max-width: 86%;
+  background: linear-gradient(180deg, #f2484f, var(--red) 55%, var(--red-deep)); border: 5px solid #ffd36b;
+  box-shadow: 0 0 0 3px var(--gold-deep), 0 8px 18px rgba(0,0,0,.35); border-radius: 18px; padding: 6px 30px 8px; text-align: center; }
+.plaque span { display: block; font: 600 clamp(22px, 4.4vw, 38px)/1.2 var(--font-display); color: #fff3d6; text-shadow: 0 2px 0 var(--red-deep); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bulbs { display: flex; justify-content: space-between; padding: 0 8px; margin-bottom: 10px; }
+.bulbs.bottom { margin: 10px 0 0; }
+.bulbs i { width: 11px; height: 11px; border-radius: 50%; background: #fff4c2; box-shadow: 0 0 8px 2px rgba(255,236,150,.85); }
+.bulbs i:nth-child(odd) { opacity: .45; box-shadow: none; }
+.machine.spinning .bulbs i { animation: blink .35s steps(1) infinite; }
+.machine.spinning .bulbs i:nth-child(odd) { animation-delay: .175s; }
+@keyframes blink { 50% { opacity: .25; box-shadow: none; } }
+.bezel { background: linear-gradient(180deg, var(--red), var(--red-deep)); border-radius: 22px; padding: clamp(8px, 1.6vw, 16px); box-shadow: inset 0 4px 10px rgba(0,0,0,.45), 0 2px 0 rgba(255,255,255,.4); }
+.reels { display: grid; grid-template-columns: repeat(var(--n, 3), minmax(0, 1fr)); gap: clamp(5px, 1vw, 10px); }
+.reel { position: relative; aspect-ratio: 1 / 1.08; max-width: 100%; background: var(--window); border-radius: 10px; overflow: hidden;
+  container-type: size; box-shadow: inset 0 0 0 3px rgba(0,0,0,.18); border: 0; padding: 0; color: var(--ink); cursor: default; }
+.is-host .reel { cursor: pointer; }
+.reel::after { content: ""; position: absolute; inset: 0; pointer-events: none; border-radius: inherit;
+  background: linear-gradient(180deg, rgba(0,0,0,.28) 0%, transparent 18%, transparent 82%, rgba(0,0,0,.28) 100%); }
+.reel .face { position: absolute; inset: 0; display: grid; place-items: center; padding: 6%; }
+.reel .face img { width: 100%; height: 100%; object-fit: contain; }
+.stext { font: 600 calc(min(42cqw, 170cqw / var(--len, 3))) / 1.05 var(--font-display); text-align: center; word-break: break-word; }
+.cover { position: absolute; inset: 0; display: grid; place-items: center; background: repeating-linear-gradient(135deg, #f2484f 0 14px, var(--red) 14px 28px); color: #ffd36b; font: 700 46cqw/1 var(--font-num); text-shadow: 0 4px 0 var(--red-deep); }
+.reel.blur .face { filter: blur(3px); transform: translateY(6%); }
+.reel.land .face { animation: land .42s cubic-bezier(.3,1.6,.5,1); }
+@keyframes land { 0% { transform: translateY(-30%); } 100% { transform: translateY(0); } }
+.play-row { display: flex; justify-content: center; margin-top: 18px; }
+.play { font: 700 clamp(20px, 3.2vw, 28px)/1 var(--font-num); letter-spacing: .14em; color: #ffd36b; cursor: pointer;
+  background: linear-gradient(180deg, #f2484f, var(--red-deep)); border: 4px solid #ffd36b; border-radius: 999px;
+  padding: 12px 44px 13px; box-shadow: 0 6px 0 var(--red-deep), 0 10px 20px rgba(0,0,0,.35); transition: transform .08s; }
+.play:active { transform: translateY(4px); box-shadow: 0 2px 0 var(--red-deep); }
+.play:disabled { filter: grayscale(.6) brightness(.85); cursor: default; }
+.answer { width: min(100%, 860px); text-align: center; background: rgba(0,0,0,.35); border: 2px solid var(--gold); border-radius: 20px; padding: 14px 18px 18px; }
+.ans-label { font: 600 13px var(--font-num); letter-spacing: .2em; color: var(--gold); }
+.ans-text { font: 600 clamp(34px, 7vw, 64px)/1.15 var(--font-display); color: #fff; text-wrap: balance; }
+.ans-text span { display: inline-block; animation: pop .5s cubic-bezier(.3,1.7,.5,1) both; }
+.ans-note { color: var(--muted); margin-top: 4px; }
+@keyframes pop { from { transform: scale(0) rotate(-12deg); opacity: 0; } }
+.controls { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+.btn { font: 600 15px var(--font-display); border-radius: 12px; padding: 10px 18px; cursor: pointer; border: 2px solid var(--line); background: var(--panel); color: var(--paper); }
+.btn.gold { background: var(--gold); border-color: var(--gold); color: var(--ink); }
+.btn.danger { border-color: var(--red); color: #ffb3bc; }
+.btn:disabled { opacity: .4; cursor: default; }
+.keys { color: var(--muted); font-size: 13px; text-align: center; margin: 0; }
+.keys kbd { font: 600 12px var(--font-num); border: 1px solid var(--line); border-radius: 5px; padding: 1px 6px; background: rgba(0,0,0,.3); }
+
+.panels { width: min(100%, 860px); display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; }
+.card { background: rgba(26,10,52,.78); border: 1px solid var(--line); border-radius: 16px; padding: 14px 16px; min-width: 0; display: flex; flex-direction: column; gap: 10px; }
+.card h3 { margin: 0; font: 600 16px var(--font-display); color: var(--gold); display: flex; justify-content: space-between; gap: 8px; }
+.card h3 small { font: 600 12px var(--font-num); color: var(--muted); letter-spacing: .06em; }
+.invite { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.invite code { flex: 1 1 200px; min-width: 0; overflow-wrap: anywhere; font: 600 13px var(--font-num); background: rgba(0,0,0,.3); border-radius: 8px; padding: 6px 8px; user-select: all; }
+.secret { font-size: 13px; color: var(--muted); display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.secret b { color: var(--paper); font: 600 15px var(--font-display); }
+.list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; max-height: 300px; overflow-y: auto; }
+.list li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center; padding: 6px 10px; border-radius: 10px; background: rgba(255,255,255,.04); }
+.list li.me { outline: 1px solid var(--gold); }
+.list .who { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.list .who small { display: block; color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; }
+.list .tag { font: 700 13px var(--font-num); }
+.tag.ok { color: var(--ok); } .tag.bad { color: var(--bad); } .tag.pts { color: var(--gold); font-size: 16px; font-variant-numeric: tabular-nums; }
+.empty { color: var(--muted); font-size: 13px; margin: 0; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chips span { font-size: 13px; background: rgba(255,255,255,.06); border: 1px solid var(--line); border-radius: 999px; padding: 2px 10px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.guess-row { display: flex; gap: 8px; }
+.guess-row input { flex: 1; }
+.mine { font-size: 14px; color: var(--muted); margin: 0; }
+.mine b { color: var(--paper); }
+.mine .ok { color: var(--ok); } .mine .bad { color: var(--bad); }
+
+/* host editor */
+.host { max-width: 1080px; width: 100%; margin: 20px auto 0; display: flex; flex-direction: column; gap: 16px; }
+.host-head { display: flex; gap: 12px; flex-wrap: wrap; align-items: end; }
+.field { display: flex; flex-direction: column; gap: 4px; min-width: 0; flex: 1 1 220px; }
+.card > .field { flex: 0 0 auto; }
+.field > span { font-size: 12px; letter-spacing: .04em; color: var(--muted); }
+input[type="text"] { font: 400 16px var(--font-body); color: var(--paper); background: rgba(0,0,0,.3); border: 1px solid var(--line); border-radius: 10px; padding: 9px 12px; width: 100%; min-width: 0; }
+input:disabled { opacity: .55; }
+input::placeholder { color: #8c7bb0; }
+.note { font-size: 13px; color: var(--muted); margin: 0; }
+.note.warn { color: var(--bad); }
+.qcard { background: var(--panel); border: 1px solid var(--line); border-radius: 18px; padding: 16px; display: flex; flex-direction: column; gap: 14px; }
+.qcard.current { border-color: var(--gold); }
+.qhead { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.qnum { font: 700 18px var(--font-num); color: var(--gold); min-width: 56px; }
+.qhead .field { flex: 1 1 200px; }
+.stepper { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); }
+.stepper button { width: 32px; height: 32px; border-radius: 9px; border: 1px solid var(--line); background: rgba(0,0,0,.3); color: var(--paper); font: 700 18px var(--font-num); cursor: pointer; }
+.stepper b { font: 700 18px var(--font-num); color: var(--paper); min-width: 18px; text-align: center; }
+.qtools { display: inline-flex; gap: 6px; flex-wrap: wrap; }
+.qtools button { font: 600 13px var(--font-display); padding: 6px 10px; border-radius: 9px; border: 1px solid var(--line); background: rgba(0,0,0,.25); color: var(--paper); cursor: pointer; }
+.qtools button:disabled { opacity: .4; cursor: default; }
+.qtools button.confirm { background: var(--red); border-color: var(--red); }
+.eslots { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
+.eslot { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.drop { position: relative; aspect-ratio: 1 / 1.08; max-width: 100%; border-radius: 12px; background: var(--window); color: var(--ink); display: grid; place-items: center; overflow: hidden; cursor: pointer; container-type: size; border: 2px dashed transparent; }
+.drop.over { border-color: var(--ok); }
+.drop.busy::after { content: "กำลังบันทึก…"; position: absolute; inset: 0; display: grid; place-items: center; background: rgba(255,255,255,.85); font: 600 14px var(--font-display); color: var(--ink); }
+.drop img { width: 100%; height: 100%; object-fit: contain; padding: 6%; }
+.drop .hint { font: 400 13px/1.35 var(--font-body); color: #6b5d86; text-align: center; padding: 10px; }
+.drop .hint b { display: block; font: 600 30px var(--font-display); color: var(--red); }
+.slot-no { position: absolute; top: 6px; left: 8px; font: 700 12px var(--font-num); color: #6b5d86; z-index: 1; }
+.eslot-row { display: flex; gap: 6px; }
+.eslot-row input { flex: 1; }
+.eslot-row button { font: 600 12px var(--font-display); padding: 0 9px; border-radius: 9px; border: 1px solid var(--line); background: rgba(0,0,0,.25); color: var(--paper); cursor: pointer; }
+.qfoot { display: flex; gap: 12px; flex-wrap: wrap; align-items: end; }
+
+#confetti { position: fixed; inset: 0; pointer-events: none; z-index: 5; width: 100%; height: 100%; }
+@media (max-width: 560px) {
+  .machine { border-radius: 22px; padding-top: 40px; }
+  .bulbs i { width: 8px; height: 8px; }
+  .play { padding: 10px 32px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sunburst { animation: none; }
+  .machine.spinning .bulbs i, .reel.land .face, .ans-text span { animation: none; }
+}
+</style>
+</head>
+<body>
+<div class="sunburst" aria-hidden="true"></div>
+<canvas id="confetti" aria-hidden="true"></canvas>
+
+<div class="app" id="app">
+  <header class="topbar">
+    <div class="brand" id="brand">ตู้ทายคำจากภาพ</div>
+    <span class="roomcode" id="roomBadge" hidden></span>
+    <span class="role" id="role" hidden></span>
+    <div class="tabs" role="tablist" id="tabs" hidden>
+      <button id="tabStage" role="tab" aria-selected="true">เวที</button>
+      <button id="tabHost" role="tab" aria-selected="false">ตั้งโจทย์</button>
+    </div>
+    <button class="iconbtn" id="soundBtn" aria-pressed="true">เสียง: เปิด</button>
+    <button class="iconbtn" id="fsBtn">เต็มจอ</button>
+    <button class="iconbtn" id="leaveBtn" hidden>ออกจากห้อง</button>
+  </header>
+
+  <section class="banner" id="banner">
+    <h2 id="bannerTitle">กำลังโหลด…</h2>
+    <p id="bannerText">รอสักครู่</p>
+  </section>
+
+  <!-- HOME -->
+  <section class="home" id="home" hidden>
+    <div class="hero">
+      <h1>ตู้ทายคำจากภาพ</h1>
+      <p>ดูภาพ ต่อเสียง แล้วทายว่าเป็นคำอะไร · เล่นพร้อมกันหลายคน ไม่ต้องสมัครสมาชิก</p>
+    </div>
+    <div class="home-grid">
+      <form class="card" id="joinForm">
+        <h3>เข้าร่วมเกม</h3>
+        <label class="field"><span>รหัสห้อง</span><input type="text" id="joinCode" class="codeinput" maxlength="6" autocomplete="off" placeholder="ABCDE"></label>
+        <label class="field"><span>ชื่อที่จะโชว์</span><input type="text" id="joinName" maxlength="20" autocomplete="nickname" placeholder="เช่น ต้น"></label>
+        <p class="err" id="joinErr" hidden></p>
+        <button class="btn gold" id="joinBtn" type="submit">เข้าร่วม</button>
+      </form>
+      <section class="card">
+        <h3>เป็น host</h3>
+        <p class="note">สร้างห้อง ใส่รูปโจทย์ แล้วส่งรหัสหรือลิงก์ให้เพื่อน ห้องเก็บไว้ออนไลน์ เตรียมโจทย์ล่วงหน้าแล้วกลับมาเปิดทีหลังได้</p>
+        <button class="btn gold" id="createBtn">สร้างห้องใหม่</button>
+        <div id="myRoomsWrap" hidden>
+          <p class="note" style="margin-bottom:6px">ห้องที่สร้างจากเครื่องนี้</p>
+          <ul class="rooms" id="myRooms"></ul>
+        </div>
+      </section>
+    </div>
+  </section>
+
+  <!-- STAGE -->
+  <main class="stage" id="stage" hidden>
+    <div class="progress" id="progress"></div>
+    <div class="machine" id="machine">
+      <div class="plaque"><span id="plaqueText"></span></div>
+      <div class="bulbs" id="bulbsTop"></div>
+      <div class="bezel"><div class="reels" id="reels"></div></div>
+      <div class="bulbs bottom" id="bulbsBottom"></div>
+      <div class="play-row" id="playRow"><button class="play" id="playBtn">PLAY</button></div>
+    </div>
+    <section class="answer" id="answerBox" hidden aria-live="polite">
+      <div class="ans-label">เฉลย</div>
+      <div class="ans-text" id="ansText"></div>
+      <div class="ans-note" id="ansNote"></div>
+    </section>
+    <div class="controls" id="hostControls" hidden>
+      <button class="btn" id="prevBtn">◀ ข้อก่อน</button>
+      <button class="btn gold" id="revealBtn">เฉลย</button>
+      <button class="btn" id="nextBtn">ข้อถัดไป ▶</button>
+    </div>
+    <p class="keys" id="hostKeys" hidden><kbd>Space</kbd> หมุน · <kbd>Enter</kbd> เฉลย · <kbd>←</kbd> <kbd>→</kbd> เปลี่ยนข้อ · คลิกช่องเพื่อเปิดทีละช่อง</p>
+    <p class="keys" id="playerKeys" hidden>host เป็นคนหมุนและเฉลย ทุกคนเห็นพร้อมกัน</p>
+
+    <div class="panels">
+      <section class="card" id="guessCard" hidden>
+        <h3>ทายคำตอบ <small id="meName"></small></h3>
+        <form class="guess-row" id="guessForm">
+          <input type="text" id="guessInput" placeholder="พิมพ์คำตอบ" autocomplete="off" maxlength="60">
+          <button class="btn gold" id="guessBtn" type="submit">ส่ง</button>
+        </form>
+        <p class="mine" id="mine"></p>
+      </section>
+      <section class="card" id="inviteCard" hidden>
+        <h3>ชวนเพื่อน <small id="playerCount"></small></h3>
+        <div class="invite"><code id="inviteLink"></code><button class="iconbtn" id="copyBtn" type="button">คัดลอกลิงก์</button></div>
+        <div class="chips" id="playerChips"></div>
+      </section>
+      <section class="card" id="feedCard" hidden>
+        <h3>คำตอบจากผู้เล่น <small id="feedCount"></small></h3>
+        <div class="secret"><span>เฉลยข้อนี้ (เห็นเฉพาะ host):</span><b id="secretAns" hidden></b><button class="iconbtn" id="secretBtn" type="button">แสดง</button></div>
+        <ul class="list" id="feed"></ul>
+      </section>
+      <section class="card">
+        <h3>คะแนน <small>ตอบถูก = 1 คะแนน</small></h3>
+        <ul class="list" id="scores"></ul>
+      </section>
+    </div>
+    <div class="controls" id="hostReset" hidden><button class="btn danger" id="resetBtn">ล้างคะแนน + กลับข้อแรก</button></div>
+  </main>
+
+  <!-- HOST EDITOR -->
+  <section class="host" id="host" hidden>
+    <div class="host-head">
+      <label class="field"><span>ชื่อเกม (โชว์มุมซ้ายบน)</span><input type="text" id="gameTitle" placeholder="ตู้ทายคำจากภาพ"></label>
+      <button class="btn gold" id="addQ">+ เพิ่มข้อ</button>
+      <button class="btn" id="loadSample">เพิ่มข้อตัวอย่าง</button>
+      <button class="btn danger" id="clearAll">ลบทุกข้อ</button>
+    </div>
+    <p class="note" id="saveNote">ใส่รูปได้ 3 วิธี: คลิกช่อง, ลากไฟล์มาวาง, หรือคลิกช่องแล้วกด Ctrl+V · พิมพ์ข้อความแทนรูปก็ได้ · บันทึกออนไลน์อัตโนมัติ ผู้เล่นเห็นเฉลยเมื่อกดเฉลยเท่านั้น</p>
+    <div id="qlist" style="display:flex;flex-direction:column;gap:16px"></div>
+  </section>
+</div>
+<input type="file" id="filePick" accept="image/*" hidden>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
+<script src="firebase-config.js"></script>
+<script>
+(() => {
+const $ = id => document.getElementById(id);
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const clone = o => JSON.parse(JSON.stringify(o));
+const norm = s => String(s || '').normalize('NFC').toLowerCase().replace(/[\s​\-_.]/g, '');
+const emptySlot = () => ({ img: '', text: '' });
+const lsGet = (k, d) => { try { const v = localStorage.getItem(k); return v === null ? d : v; } catch { return d; } };
+const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch {} };
+const lsDel = k => { try { localStorage.removeItem(k); } catch {} };
+const pid = lsGet('rb_pid', '') || (() => { const v = uid(); lsSet('rb_pid', v); return v; })();
+const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+
+/* ---------- state ---------- */
+let fdb = null, code = null, isHost = false, myName = '';
+let config = { title: '', order: [] };
+const Q = {}, S = {};
+let live = null, scores = {}, awarded = {}, board = [], players = {}, myGuess = null;
+let spinning = false, lastNonce = null, lastQid = null, lastRevealKey = null, localOpened = {}, showSecret = false;
+let subs = [];
+const pendingQ = new Set(), pendingS = new Set();
+const roomPath = () => 'games/rebus-' + code;
+
+/* ---------- writes: one at a time per document ---------- */
+const chains = {}, timers = {};
+function write(key, fn) {
+  chains[key] = (chains[key] || Promise.resolve()).then(fn).catch(e => { console.warn(key, e); note(errText(e), true); });
+  return chains[key];
+}
+function errText(e) {
+  if (e?.code === 'permission-denied') return 'ฐานข้อมูลไม่อนุญาตให้บันทึก (ตรวจกฎ Firestore ของ games)';
+  if (e?.code === 'invalid-argument' || /exceeds the maximum/i.test(e?.message || '')) return 'ข้อนี้รูปใหญ่เกินไป ลองใช้รูปน้อยลงหรือรูปที่เล็กกว่านี้';
+  return 'บันทึกไม่สำเร็จ ตรวจอินเทอร์เน็ตแล้วลองอีกครั้ง';
+}
+function saveQ(qid, delay = 400) {
+  pendingQ.add(qid); clearTimeout(timers['q' + qid]);
+  timers['q' + qid] = setTimeout(() => {
+    const d = Q[qid] ? clone(Q[qid]) : null; if (!d) return;
+    write('q' + qid, () => fdb.doc(roomPath() + '/questions/' + qid).set(d)).then(() => pendingQ.delete(qid));
+  }, delay);
+}
+function saveS(qid, delay = 400) {
+  pendingS.add(qid); clearTimeout(timers['s' + qid]);
+  timers['s' + qid] = setTimeout(() => {
+    const d = clone(S[qid] || { answer: '', note: '' });
+    write('s' + qid, () => fdb.doc(roomPath() + '/secret/' + qid).set(d)).then(() => pendingS.delete(qid));
+  }, delay);
+}
+function roomUpdate(patch) { const d = clone(patch); return write('room', () => fdb.doc(roomPath()).update(d)); }
+function saveConfig(delay = 300) {
+  clearTimeout(timers.cfg);
+  timers.cfg = setTimeout(() => { roomUpdate({ title: config.title || '', order: config.order }); rememberRoom(); }, delay);
+}
+function setLive(patch) {
+  live = { ...(live || {}), ...patch };
+  roomUpdate({ live });
+  renderStage();
+}
+
+/* ---------- derived ---------- */
+function order() {
+  const o = (config.order || []).filter(id => Q[id]);
+  Object.keys(Q).forEach(id => { if (!o.includes(id)) o.push(id); });
+  return o;
+}
+function stageQid() {
+  if (live?.qid && Q[live.qid]) return live.qid;
+  return isHost ? order()[0] || null : null;
+}
+const onLive = qid => live && live.qid === qid;
+function isOpen(qid, i) {
+  if (!onLive(qid)) return false;
+  return live.phase === 'revealed' || !!(live.opened || [])[i] || !!localOpened[i];
+}
+const labelOf = q => (q.label || '').trim() || `${q.slots.length} พยางค์`;
+
+/* ---------- sound ---------- */
+let actx, sound = true;
+function tone(freq, dur, type = 'square', vol = .05, when = 0) {
+  if (!sound) return;
+  try {
+    actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+    if (actx.state === 'suspended') actx.resume();
+    const t = actx.currentTime + when, o = actx.createOscillator(), g = actx.createGain();
+    o.type = type; o.frequency.setValueAtTime(freq, t);
+    g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(.0001, t + dur);
+    o.connect(g).connect(actx.destination); o.start(t); o.stop(t + dur);
+  } catch {}
+}
+document.addEventListener('pointerdown', () => { try { actx = actx || new (window.AudioContext || window.webkitAudioContext)(); actx.resume(); } catch {} }, { once: true });
+const tick = () => tone(1400 + Math.random() * 400, .03, 'square', .025);
+const ding = () => { tone(880, .25, 'triangle', .12); tone(1320, .3, 'triangle', .06, .05); };
+const fanfare = () => [523, 659, 784, 1047].forEach((f, i) => tone(f, .35, 'triangle', .12, i * .11));
+
+/* ---------- screens ---------- */
+function show(which) {
+  ['banner', 'home', 'stage', 'host'].forEach(id => { $(id).hidden = id !== which; });
+}
+function banner(title, text) { show('banner'); $('bannerTitle').textContent = title; $('bannerText').textContent = text; }
+function renderChrome() {
+  const inRoom = !!code;
+  $('roomBadge').hidden = !inRoom; $('roomBadge').textContent = code || '';
+  $('role').hidden = !inRoom; $('role').textContent = isHost ? 'HOST' : 'ผู้เล่น'; $('role').classList.toggle('host', isHost);
+  $('tabs').hidden = !(inRoom && isHost);
+  $('leaveBtn').hidden = !inRoom;
+  document.body.classList.toggle('is-host', isHost);
+  $('brand').textContent = (inRoom && config.title) || 'ตู้ทายคำจากภาพ';
+}
+
+/* ---------- stage ---------- */
+function faceHTML(s) {
+  if (s.img) return `<img src="${esc(s.img)}" alt="">`;
+  if (s.text) return `<span class="stext" style="--len:${Math.max(1, [...s.text].length)}">${esc(s.text)}</span>`;
+  return `<span class="stext" style="--len:1;color:#cfc4e4">?</span>`;
+}
+function bulbs() {
+  const n = window.innerWidth < 560 ? 12 : 20;
+  $('bulbsTop').innerHTML = $('bulbsBottom').innerHTML = '<i></i>'.repeat(n);
+}
+function renderReels(qid) {
+  const q = Q[qid], reels = $('reels');
+  reels.style.setProperty('--n', q.slots.length);
+  reels.innerHTML = q.slots.map((s, i) => {
+    const o = isOpen(qid, i);
+    return `<button class="reel" data-i="${i}" aria-label="ช่องที่ ${i + 1}" ${isHost ? '' : 'tabindex="-1"'}><div class="face">${o ? faceHTML(s) : ''}</div>${o ? '' : '<div class="cover">?</div>'}</button>`;
+  }).join('');
+}
+function renderStage() {
+  if (!code) return;
+  renderChrome();
+  const qid = stageQid();
+  $('machine').hidden = !qid;
+  if (!qid) {
+    $('progress').textContent = isHost ? 'ยังไม่มีโจทย์ ไปที่แท็บ "ตั้งโจทย์" เพื่อเพิ่มข้อ' : 'รอ host เริ่มเกม…';
+    $('answerBox').hidden = true; $('hostControls').hidden = true;
+  } else {
+    const o = order(), idx = o.indexOf(qid), q = Q[qid];
+    $('progress').innerHTML = `ข้อ <b>${idx + 1}</b> / ${o.length}`;
+    $('plaqueText').textContent = labelOf(q);
+    if (!spinning) renderReels(qid);
+    const revealed = onLive(qid) && live.phase === 'revealed';
+    $('answerBox').hidden = !revealed;
+    if (revealed && $('ansText').dataset.k !== qid + live.answer) {
+      $('ansText').dataset.k = qid + live.answer;
+      $('ansText').innerHTML = [...(live.answer || '—')].map((c, i) => `<span style="animation-delay:${i * 60}ms">${c === ' ' ? '&nbsp;' : esc(c)}</span>`).join('');
+      $('ansNote').textContent = live.note || '';
+    }
+    if (!revealed) $('ansText').dataset.k = '';
+    $('hostControls').hidden = !isHost;
+    $('prevBtn').disabled = idx <= 0 || spinning;
+    $('nextBtn').disabled = idx >= o.length - 1 || spinning;
+    $('revealBtn').disabled = spinning || revealed;
+    $('playBtn').disabled = spinning;
+    $('secretAns').textContent = S[qid]?.answer || '(ยังไม่ได้ใส่เฉลย)';
+  }
+  $('playRow').hidden = !isHost;
+  $('hostKeys').hidden = !isHost; $('playerKeys').hidden = isHost;
+  $('hostReset').hidden = !isHost;
+  renderGuessCard(); renderInvite(); renderFeed(); renderScores();
+}
+function pool() {
+  const all = Object.values(Q).flatMap(x => x.slots).filter(s => s.img || s.text);
+  return all.length ? all : [{ text: '?' }];
+}
+function runSpin(qid, slots) {
+  spinning = true; renderStage(); renderReels(qid);
+  $('machine').classList.add('spinning');
+  const p = pool(), q = Q[qid];
+  const jobs = slots.map((i, k) => new Promise(res => {
+    const el = $('reels').querySelector(`[data-i="${i}"]`);
+    if (!el) return res();
+    const face = el.querySelector('.face'); el.querySelector('.cover')?.remove();
+    el.classList.remove('land'); el.classList.add('blur');
+    const iv = setInterval(() => { face.innerHTML = faceHTML(p[Math.floor(Math.random() * p.length)]); tick(); }, 75);
+    setTimeout(() => {
+      clearInterval(iv); localOpened[i] = true;
+      face.innerHTML = faceHTML(q.slots[i] || {});
+      el.classList.remove('blur'); void el.offsetWidth; el.classList.add('land');
+      ding(); res();
+    }, (slots.length > 1 ? 900 : 800) + k * 520);
+  }));
+  Promise.all(jobs).then(() => {
+    spinning = false; $('machine').classList.remove('spinning');
+    if (isHost && onLive(qid) && live.phase !== 'revealed') {
+      const opened = q.slots.map((_, i) => !!((live.opened || [])[i] || localOpened[i]));
+      setLive({ phase: opened.every(Boolean) ? 'shown' : 'idle', opened });
+    } else renderStage();
+  });
+}
+function hostSpin(slots) {
+  const qid = stageQid();
+  if (!isHost || !qid || spinning) return;
+  const cur = onLive(qid) ? (live.opened || []) : [];
+  if (slots.length === 1 && onLive(qid) && (live.phase === 'revealed' || cur[slots[0]] || localOpened[slots[0]])) return;
+  const opened = slots.length > 1 ? [] : cur;
+  if (slots.length > 1) localOpened = {};
+  setLive({ qid, phase: 'spinning', opened, answer: '', note: '', spin: { nonce: uid(), slots } });
+}
+function reveal() {
+  const qid = stageQid();
+  if (!isHost || !qid || spinning || (onLive(qid) && live.phase === 'revealed')) return;
+  const s = S[qid] || {};
+  setLive({ qid, phase: 'revealed', opened: Q[qid].slots.map(() => true), answer: s.answer || '', note: s.note || '' });
+  lastRevealKey = qid + '|' + (live.spin?.nonce || '');
+  fanfare(); confetti();
+  award(qid, s.answer || '');
+}
+function makeBoard(sc) {
+  return Object.entries(sc).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1])
+    .map(([id, v]) => ({ id, name: players[id]?.name || 'ผู้เล่น', score: v }));
+}
+function award(qid, answer) {
+  if (!answer || awarded[qid]) return;
+  const right = Object.entries(players).filter(([, p]) => p.guess && p.guess.qid === qid && norm(p.guess.text) === norm(answer));
+  scores = { ...scores }; right.forEach(([id]) => { scores[id] = (scores[id] || 0) + 1; });
+  awarded = { ...awarded, [qid]: true };
+  board = makeBoard(scores);
+  roomUpdate({ scores, awarded, board });
+}
+function go(d) {
+  if (!isHost || spinning) return;
+  const o = order(), idx = o.indexOf(stageQid()), n = Math.min(o.length - 1, Math.max(0, idx + d));
+  if (n === idx || n < 0) return;
+  localOpened = {};
+  setLive({ qid: o[n], phase: 'idle', opened: [], answer: '', note: '', spin: null });
+}
+$('playBtn').onclick = () => { const q = Q[stageQid()]; if (q) hostSpin(q.slots.map((_, i) => i)); };
+$('revealBtn').onclick = reveal;
+$('prevBtn').onclick = () => go(-1);
+$('nextBtn').onclick = () => go(1);
+$('reels').addEventListener('click', e => { const r = e.target.closest('.reel'); if (r && isHost) hostSpin([+r.dataset.i]); });
+document.addEventListener('keydown', e => {
+  if (!isHost || $('stage').hidden || e.target.matches('input')) return;
+  if (e.code === 'Space') { e.preventDefault(); $('playBtn').click(); }
+  else if (e.key === 'Enter') { e.preventDefault(); reveal(); }
+  else if (e.key === 'ArrowRight') go(1);
+  else if (e.key === 'ArrowLeft') go(-1);
+});
+$('secretBtn').onclick = () => { showSecret = !showSecret; $('secretAns').hidden = !showSecret; $('secretBtn').textContent = showSecret ? 'ซ่อน' : 'แสดง'; };
+function armed(b, label, armedLabel) {
+  if (b.dataset.armed) { delete b.dataset.armed; b.textContent = label; return true; }
+  b.dataset.armed = 1; b.textContent = armedLabel;
+  setTimeout(() => { if (b.dataset.armed) { delete b.dataset.armed; b.textContent = label; } }, 3000);
+  return false;
+}
+$('resetBtn').onclick = e => {
+  if (!armed(e.currentTarget, 'ล้างคะแนน + กลับข้อแรก', 'กดอีกครั้งเพื่อยืนยัน')) return;
+  scores = {}; awarded = {}; board = [];
+  roomUpdate({ scores, awarded, board });
+  localOpened = {};
+  setLive({ qid: order()[0] || '', phase: 'idle', opened: [], answer: '', note: '', spin: null });
+};
+
+/* ---------- guesses, invite, scores ---------- */
+function renderGuessCard() {
+  $('guessCard').hidden = isHost;
+  if (isHost) return;
+  $('meName').textContent = myName;
+  const qid = live?.qid && Q[live.qid] ? live.qid : null;
+  const revealed = qid && live.phase === 'revealed';
+  $('guessInput').disabled = $('guessBtn').disabled = !qid || revealed;
+  const g = myGuess && myGuess.qid === qid ? myGuess : null;
+  const m = $('mine');
+  if (!qid) m.textContent = 'รอ host เริ่มข้อแรก';
+  else if (!g) m.textContent = revealed ? 'ข้อนี้คุณไม่ได้ส่งคำตอบ' : 'ส่งได้หลายครั้ง ระบบนับคำตอบล่าสุดก่อนเฉลย';
+  else {
+    m.innerHTML = `คำตอบของคุณ: <b></b>${revealed ? (norm(g.text) === norm(live.answer) ? ' <span class="ok">✓ ถูก</span>' : ' <span class="bad">✗ ยังไม่ถูก</span>') : ''}`;
+    m.querySelector('b').textContent = g.text;
+  }
+}
+$('guessForm').addEventListener('submit', e => {
+  e.preventDefault();
+  const text = $('guessInput').value.trim(), qid = live?.qid;
+  if (!text || !qid || live.phase === 'revealed') return;
+  myGuess = { qid, text, at: Date.now() };
+  $('guessInput').value = '';
+  renderGuessCard();
+  const d = clone(myGuess);
+  write('me', () => fdb.doc(roomPath() + '/players/' + pid).set({ name: myName, guess: d }, { merge: true }));
+});
+function inviteUrl() { return location.origin + location.pathname + '?room=' + code; }
+function renderInvite() {
+  $('inviteCard').hidden = !isHost;
+  if (!isHost) return;
+  $('inviteLink').textContent = inviteUrl();
+  const ps = Object.values(players);
+  $('playerCount').textContent = `${ps.length} คนในห้อง`;
+  $('playerChips').innerHTML = '';
+  ps.forEach(p => { const s = document.createElement('span'); s.textContent = p.name || 'ผู้เล่น'; $('playerChips').appendChild(s); });
+}
+$('copyBtn').onclick = async () => {
+  try { await navigator.clipboard.writeText(inviteUrl()); $('copyBtn').textContent = 'คัดลอกแล้ว'; }
+  catch { const r = document.createRange(); r.selectNodeContents($('inviteLink')); const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r); $('copyBtn').textContent = 'กด Ctrl+C'; }
+  setTimeout(() => { $('copyBtn').textContent = 'คัดลอกลิงก์'; }, 2000);
+};
+function renderFeed() {
+  $('feedCard').hidden = !isHost;
+  if (!isHost) return;
+  const qid = stageQid();
+  const rows = Object.entries(players).filter(([, p]) => p.guess && p.guess.qid === qid).sort((a, b) => a[1].guess.at - b[1].guess.at);
+  $('feedCount').textContent = rows.length ? `ตอบแล้ว ${rows.length} คน` : '';
+  if (!rows.length) { $('feed').innerHTML = '<li style="display:block" class="empty">ยังไม่มีใครส่งคำตอบข้อนี้</li>'; return; }
+  const ans = S[qid]?.answer || '';
+  $('feed').innerHTML = '';
+  rows.forEach(([, p]) => {
+    const li = document.createElement('li'), ok = ans && norm(p.guess.text) === norm(ans);
+    li.innerHTML = `<div class="who"><span></span><small></small></div><span class="tag ${ans ? (ok ? 'ok' : 'bad') : ''}">${ans ? (ok ? '✓' : '✗') : ''}</span>`;
+    li.querySelector('.who span').textContent = p.guess.text;
+    li.querySelector('small').textContent = p.name || 'ผู้เล่น';
+    $('feed').appendChild(li);
+  });
+}
+function renderScores() {
+  const rows = (board || []).slice(0, 20);
+  if (!rows.length) { $('scores').innerHTML = '<li style="display:block" class="empty">ยังไม่มีคะแนน คนที่ตอบถูกก่อนกดเฉลยจะได้คะแนน</li>'; return; }
+  $('scores').innerHTML = '';
+  rows.forEach(r => {
+    const li = document.createElement('li');
+    if (r.id === pid) li.className = 'me';
+    li.innerHTML = `<div class="who"></div><span class="tag pts"></span>`;
+    li.querySelector('.who').textContent = (r.name || 'ผู้เล่น') + (r.id === pid ? ' (คุณ)' : '');
+    li.querySelector('.pts').textContent = r.score;
+    $('scores').appendChild(li);
+  });
+}
+
+/* ---------- confetti ---------- */
+function confetti() {
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const c = $('confetti'), x = c.getContext('2d');
+  c.width = innerWidth; c.height = innerHeight;
+  const cols = ['#f6b93b', '#d7263d', '#fff6e6', '#3ddc97', '#7fb6ff'];
+  const parts = Array.from({ length: 140 }, () => ({ x: c.width / 2, y: c.height * .45, vx: (Math.random() - .5) * 16, vy: -Math.random() * 15 - 4,
+    r: Math.random() * 6 + 4, a: Math.random() * 6, va: (Math.random() - .5) * .4, col: cols[Math.floor(Math.random() * cols.length)] }));
+  let t = 0;
+  (function f() {
+    x.clearRect(0, 0, c.width, c.height);
+    parts.forEach(p => { p.vy += .42; p.vx *= .99; p.x += p.vx; p.y += p.vy; p.a += p.va;
+      x.save(); x.translate(p.x, p.y); x.rotate(p.a); x.fillStyle = p.col; x.fillRect(-p.r / 2, -p.r / 4, p.r, p.r / 2); x.restore(); });
+    if (++t < 160) requestAnimationFrame(f); else x.clearRect(0, 0, c.width, c.height);
+  })();
+}
+
+/* ---------- toolbar ---------- */
+function showTab(hostTab) {
+  show(hostTab ? 'host' : 'stage');
+  $('tabStage').setAttribute('aria-selected', !hostTab); $('tabHost').setAttribute('aria-selected', hostTab);
+  if (hostTab) renderHost(); else renderStage();
+}
+$('tabStage').onclick = () => showTab(false);
+$('tabHost').onclick = () => showTab(true);
+$('soundBtn').onclick = () => { sound = !sound; $('soundBtn').textContent = 'เสียง: ' + (sound ? 'เปิด' : 'ปิด'); $('soundBtn').setAttribute('aria-pressed', sound); };
+$('fsBtn').onclick = () => { try { document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen().catch(() => {}); } catch {} };
+$('leaveBtn').onclick = e => { if (armed(e.currentTarget, 'ออกจากห้อง', 'กดอีกครั้งเพื่อออก')) leaveRoom(); };
+
+/* ---------- host editor ---------- */
+let pickTarget = null, activeSlot = null;
+function note(msg, warn) {
+  const n = $('saveNote');
+  n.dataset.base = n.dataset.base || n.textContent;
+  n.textContent = msg || n.dataset.base; n.classList.toggle('warn', !!warn);
+  if (msg) { clearTimeout(timers.note); timers.note = setTimeout(() => note(''), 7000); }
+  if (msg && warn && !$('stage').hidden) $('progress').textContent = msg;
+}
+function slotPreview(s) {
+  if (s.img) return `<img src="${esc(s.img)}" alt="">`;
+  if (s.text) return `<span class="stext" style="--len:${Math.max(1, [...s.text].length)}">${esc(s.text)}</span>`;
+  return `<div class="hint"><b>+</b>คลิก / ลากรูปมาวาง</div>`;
+}
+function keepFocus(fn) {
+  const a = document.activeElement, id = a && a.id;
+  let s, e; try { s = a.selectionStart; e = a.selectionEnd; } catch {}
+  fn();
+  if (id) { const n = $(id); if (n && n !== document.activeElement) { n.focus(); try { n.setSelectionRange(s, e); } catch {} } }
+}
+function renderHost() {
+  if (!isHost || $('host').hidden) return;
+  renderChrome();
+  keepFocus(() => {
+    if (document.activeElement !== $('gameTitle')) $('gameTitle').value = config.title || '';
+    const o = order(), cur = stageQid();
+    $('qlist').innerHTML = o.length ? o.map((qid, qi) => {
+      const q = Q[qid], s = S[qid] || {};
+      return `
+      <article class="qcard${qid === cur ? ' current' : ''}" data-q="${qid}">
+        <div class="qhead">
+          <span class="qnum">ข้อ ${qi + 1}</span>
+          <label class="field"><span>ป้ายบนตู้ (ว่าง = "${q.slots.length} พยางค์")</span>
+            <input type="text" id="lbl-${qid}" data-f="label" value="${esc(q.label)}" placeholder="${q.slots.length} พยางค์"></label>
+          <div class="stepper">จำนวนช่อง
+            <button data-act="minus" aria-label="ลดช่อง">−</button><b>${q.slots.length}</b><button data-act="plus" aria-label="เพิ่มช่อง">+</button>
+          </div>
+          <div class="qtools">
+            <button data-act="test">เล่นข้อนี้</button>
+            <button data-act="up" ${qi === 0 ? 'disabled' : ''} aria-label="เลื่อนขึ้น">↑</button>
+            <button data-act="down" ${qi === o.length - 1 ? 'disabled' : ''} aria-label="เลื่อนลง">↓</button>
+            <button data-act="del">ลบข้อ</button>
+          </div>
+        </div>
+        <div class="eslots">
+          ${q.slots.map((sl, si) => `
+            <div class="eslot" data-s="${si}">
+              <div class="drop" tabindex="0" role="button" aria-label="ช่อง ${si + 1}: เลือกรูป"><span class="slot-no">${si + 1}</span>${slotPreview(sl)}</div>
+              <div class="eslot-row">
+                <input type="text" id="txt-${qid}-${si}" data-f="text" value="${esc(sl.text)}" placeholder="${sl.img ? 'มีรูปแล้ว' : 'หรือพิมพ์ข้อความ'}" ${sl.img ? 'disabled' : ''}>
+                <button data-act="clear" aria-label="ล้างช่อง ${si + 1}">ล้าง</button>
+              </div>
+            </div>`).join('')}
+        </div>
+        <div class="qfoot">
+          <label class="field"><span>เฉลย (ผู้เล่นเห็นเมื่อกดเฉลย)</span><input type="text" id="ans-${qid}" data-f="answer" value="${esc(s.answer)}" placeholder="เช่น ไข่ดาว"></label>
+          <label class="field"><span>คำอธิบายใต้เฉลย (ไม่บังคับ)</span><input type="text" id="note-${qid}" data-f="note" value="${esc(s.note)}" placeholder="เช่น ไข่ + ดาว"></label>
+        </div>
+      </article>`;
+    }).join('') : '<p class="note">ยังไม่มีโจทย์ กด "+ เพิ่มข้อ" เพื่อเริ่ม หรือ "เพิ่มข้อตัวอย่าง" เพื่อลองเล่นก่อน</p>';
+  });
+}
+$('gameTitle').addEventListener('input', e => { config.title = e.target.value; saveConfig(500); renderChrome(); });
+$('qlist').addEventListener('input', e => {
+  const card = e.target.closest('.qcard'); if (!card) return;
+  const qid = card.dataset.q, q = Q[qid], f = e.target.dataset.f;
+  if (f === 'text') {
+    const si = +e.target.closest('.eslot').dataset.s;
+    q.slots[si].text = e.target.value;
+    e.target.closest('.eslot').querySelector('.drop').innerHTML = `<span class="slot-no">${si + 1}</span>${slotPreview(q.slots[si])}`;
+    saveQ(qid);
+  } else if (f === 'label') { q.label = e.target.value; saveQ(qid); }
+  else if (f === 'answer' || f === 'note') { S[qid] = { answer: '', note: '', ...(S[qid] || {}), [f]: e.target.value }; saveS(qid); }
+});
+function deleteQ(qid) {
+  delete Q[qid]; delete S[qid]; pendingQ.delete(qid); pendingS.delete(qid);
+  clearTimeout(timers['q' + qid]); clearTimeout(timers['s' + qid]);
+  write('q' + qid, () => fdb.doc(roomPath() + '/questions/' + qid).delete());
+  write('s' + qid, () => fdb.doc(roomPath() + '/secret/' + qid).delete());
+}
+$('qlist').addEventListener('click', e => {
+  const card = e.target.closest('.qcard'); if (!card) return;
+  const qid = card.dataset.q, q = Q[qid];
+  const drop = e.target.closest('.drop');
+  if (drop) { activeSlot = pickTarget = { qid, si: +drop.closest('.eslot').dataset.s }; $('filePick').click(); return; }
+  const btn = e.target.closest('button[data-act]'); if (!btn) return;
+  const act = btn.dataset.act, o = order(), qi = o.indexOf(qid);
+  if (act === 'plus' && q.slots.length < 6) { q.slots.push(emptySlot()); saveQ(qid, 0); }
+  else if (act === 'minus' && q.slots.length > 1) { q.slots.pop(); saveQ(qid, 0); }
+  else if (act === 'clear') { const si = +btn.closest('.eslot').dataset.s; q.slots[si] = emptySlot(); saveQ(qid, 0); }
+  else if (act === 'up' && qi > 0) { [o[qi - 1], o[qi]] = [o[qi], o[qi - 1]]; config.order = o; saveConfig(0); }
+  else if (act === 'down' && qi < o.length - 1) { [o[qi + 1], o[qi]] = [o[qi], o[qi + 1]]; config.order = o; saveConfig(0); }
+  else if (act === 'del') {
+    if (!btn.classList.contains('confirm')) { btn.classList.add('confirm'); btn.textContent = 'กดอีกครั้งเพื่อลบ'; setTimeout(() => { if (btn.isConnected) { btn.classList.remove('confirm'); btn.textContent = 'ลบข้อ'; } }, 3000); return; }
+    const wasLive = onLive(qid);
+    deleteQ(qid); config.order = order(); saveConfig(0);
+    if (wasLive) { localOpened = {}; setLive({ qid: config.order[0] || '', phase: 'idle', opened: [], answer: '', note: '', spin: null }); }
+  } else if (act === 'test') {
+    localOpened = {};
+    if (!onLive(qid)) setLive({ qid, phase: 'idle', opened: [], answer: '', note: '', spin: null });
+    showTab(false); return;
+  } else return;
+  renderHost();
+});
+$('qlist').addEventListener('keydown', e => { if ((e.key === 'Enter' || e.key === ' ') && e.target.classList.contains('drop')) { e.preventDefault(); e.target.click(); } });
+$('qlist').addEventListener('focusin', e => { const d = e.target.closest('.drop'); if (d) activeSlot = { qid: d.closest('.qcard').dataset.q, si: +d.closest('.eslot').dataset.s }; });
+['dragover', 'dragenter'].forEach(t => $('qlist').addEventListener(t, e => { const d = e.target.closest('.drop'); if (d) { e.preventDefault(); d.classList.add('over'); } }));
+$('qlist').addEventListener('dragleave', e => { const d = e.target.closest('.drop'); if (d) d.classList.remove('over'); });
+$('qlist').addEventListener('drop', e => {
+  const d = e.target.closest('.drop'); if (!d) return;
+  e.preventDefault(); d.classList.remove('over');
+  const file = [...e.dataTransfer.files].find(f => f.type.startsWith('image/'));
+  if (file) setImage({ qid: d.closest('.qcard').dataset.q, si: +d.closest('.eslot').dataset.s }, file);
+});
+$('filePick').addEventListener('change', e => { const f = e.target.files[0]; if (f && pickTarget) setImage(pickTarget, f); e.target.value = ''; });
+document.addEventListener('paste', e => {
+  if ($('host').hidden || !activeSlot || e.target.matches('input')) return;
+  const item = [...(e.clipboardData?.items || [])].find(i => i.type.startsWith('image/'));
+  if (item) { e.preventDefault(); setImage(activeSlot, item.getAsFile()); }
+});
+
+// Firestore documents cap at 1 MB, so each picture is shrunk to a small JPEG and stored inside its question
+function shrink(file, max, quality) {
+  return new Promise((res, rej) => {
+    const r = new FileReader();
+    r.onload = () => {
+      const im = new Image();
+      im.onload = () => {
+        const k = Math.min(1, max / Math.max(im.width, im.height)), c = document.createElement('canvas');
+        c.width = Math.round(im.width * k); c.height = Math.round(im.height * k);
+        const x = c.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, c.width, c.height); x.drawImage(im, 0, 0, c.width, c.height);
+        res(c.toDataURL('image/jpeg', quality));
+      };
+      im.onerror = rej; im.src = r.result;
+    };
+    r.onerror = rej; r.readAsDataURL(file);
+  });
+}
+async function setImage(t, file) {
+  try {
+    let url = await shrink(file, 520, .75);
+    if (url.length > 140000) url = await shrink(file, 400, .6);
+    const s = Q[t.qid]?.slots[t.si]; if (!s) return;
+    s.img = url; s.text = '';
+    if (JSON.stringify(Q[t.qid]).length > 950000) { s.img = ''; note('ข้อนี้มีรูปรวมใหญ่เกินไป ลองลดจำนวนช่องหรือใช้รูปที่เรียบกว่านี้', true); }
+    else saveQ(t.qid, 0);
+  } catch { note('เปิดไฟล์นี้เป็นรูปไม่ได้ ลองใช้ไฟล์ JPG หรือ PNG', true); }
+  renderHost();
+}
+function addQuestion(slots, secret, label = '') {
+  const qid = uid();
+  Q[qid] = { label, slots }; S[qid] = secret;
+  config.order = [...order().filter(id => id !== qid), qid];
+  saveQ(qid, 0); saveS(qid, 0);
+  return qid;
+}
+$('addQ').onclick = () => {
+  addQuestion([emptySlot(), emptySlot(), emptySlot()], { answer: '', note: '' });
+  saveConfig(0); renderHost(); $('qlist').lastElementChild?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+};
+$('loadSample').onclick = () => {
+  addQuestion([{ img: '', text: '🥚' }, { img: '', text: '⭐' }], { answer: 'ไข่ดาว', note: 'ตัวอย่าง: ไข่ + ดาว' });
+  addQuestion([{ img: '', text: '🐟' }, { img: '', text: '2' }], { answer: 'ปลาทู', note: 'ตัวอย่าง: ปลา + 2 (ทู)' });
+  addQuestion([{ img: '', text: '🚗' }, { img: '', text: '🔥' }, { img: '', text: '☁️' }], { answer: 'รถไฟฟ้า', note: 'ตัวอย่าง: รถ + ไฟ + ฟ้า' });
+  saveConfig(0); renderHost();
+};
+$('clearAll').onclick = e => {
+  if (!armed(e.currentTarget, 'ลบทุกข้อ', 'กดอีกครั้งเพื่อลบทั้งหมด')) return;
+  Object.keys(Q).forEach(deleteQ);
+  config.order = []; saveConfig(0);
+  localOpened = {}; setLive({ qid: '', phase: 'idle', opened: [], answer: '', note: '', spin: null });
+  renderHost();
+};
+
+/* ---------- rooms ---------- */
+function myRooms() { try { return JSON.parse(lsGet('rb_rooms', '[]')) || []; } catch { return []; } }
+function rememberRoom() {
+  if (!isHost || !code) return;
+  const list = myRooms().filter(r => r.code !== code);
+  list.unshift({ code, title: config.title || '', at: Date.now() });
+  lsSet('rb_rooms', JSON.stringify(list.slice(0, 10)));
+}
+function renderHome() {
+  show('home'); renderChrome();
+  if (!$('joinName').value) $('joinName').value = lsGet('rb_name', '');
+  const list = myRooms();
+  $('myRoomsWrap').hidden = !list.length;
+  $('myRooms').innerHTML = '';
+  list.forEach(r => {
+    const li = document.createElement('li');
+    li.innerHTML = `<b></b><span></span><button class="iconbtn" type="button">เปิด</button>`;
+    li.querySelector('b').textContent = r.code;
+    li.querySelector('span').textContent = r.title || 'ไม่มีชื่อ';
+    li.querySelector('button').onclick = () => enterRoom(r.code, 'host');
+    $('myRooms').appendChild(li);
+  });
+}
+function joinError(msg) { $('joinErr').hidden = !msg; $('joinErr').textContent = msg || ''; }
+async function newCode() {
+  for (let n = 0; n < 6; n++) {
+    let c = ''; for (let i = 0; i < 5; i++) c += CODE_CHARS[Math.floor(Math.random() * CODE_CHARS.length)];
+    const s = await fdb.doc('games/rebus-' + c).get();
+    if (!s.exists) return c;
+  }
+  throw new Error('no-code');
+}
+$('createBtn').onclick = async () => {
+  const b = $('createBtn'); b.disabled = true; b.textContent = 'กำลังสร้าง…';
+  try {
+    const c = await newCode();
+    await fdb.doc('games/rebus-' + c).set({ title: '', order: [], live: null, scores: {}, awarded: {}, board: [], createdAt: firebase.firestore.FieldValue.serverTimestamp() });
+    code = c; isHost = true; rememberRoom();
+    await enterRoom(c, 'host', true);
+  } catch (e) {
+    console.warn(e);
+    joinError(e?.code === 'permission-denied' ? 'ฐานข้อมูลไม่อนุญาตให้สร้างห้อง (ตรวจกฎ Firestore)' : 'สร้างห้องไม่สำเร็จ ตรวจอินเทอร์เน็ตแล้วลองอีกครั้ง');
+  }
+  b.disabled = false; b.textContent = 'สร้างห้องใหม่';
+};
+$('joinForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const c = $('joinCode').value.toUpperCase().replace(/[^A-Z0-9]/g, ''), name = $('joinName').value.trim();
+  if (c.length < 4) return joinError('ใส่รหัสห้องให้ครบ');
+  if (!name) return joinError('ใส่ชื่อก่อนเข้าร่วม');
+  joinError(''); $('joinBtn').disabled = true;
+  try {
+    const s = await fdb.doc('games/rebus-' + c).get();
+    if (!s.exists) { joinError('ไม่พบห้องนี้ ตรวจรหัสอีกครั้ง'); return; }
+    myName = name; lsSet('rb_name', name);
+    await fdb.doc('games/rebus-' + c + '/players/' + pid).set({ name, joinedAt: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true });
+    await enterRoom(c, 'player', true);
+  } catch (err) {
+    console.warn(err);
+    joinError(err?.code === 'permission-denied' ? 'ฐานข้อมูลไม่อนุญาตให้เข้าห้อง' : 'เข้าห้องไม่สำเร็จ ตรวจอินเทอร์เน็ตแล้วลองอีกครั้ง');
+  } finally { $('joinBtn').disabled = false; }
+});
+
+function resetRoomState() {
+  subs.forEach(u => { try { u(); } catch {} }); subs = [];
+  Object.keys(Q).forEach(k => delete Q[k]); Object.keys(S).forEach(k => delete S[k]);
+  config = { title: '', order: [] }; live = null; scores = {}; awarded = {}; board = []; players = {}; myGuess = null;
+  spinning = false; lastNonce = null; lastQid = null; lastRevealKey = null; localOpened = {};
+  $('machine').classList.remove('spinning');
+}
+function leaveRoom() {
+  resetRoomState(); code = null; isHost = false;
+  lsDel('rb_session');
+  history.replaceState(null, '', location.pathname);
+  renderHome();
+}
+async function enterRoom(c, role, fresh) {
+  resetRoomState();
+  code = c; isHost = role === 'host';
+  if (!isHost && !myName) myName = lsGet('rb_name', '');
+  lsSet('rb_session', JSON.stringify({ code: c, role }));
+  history.replaceState(null, '', location.pathname + '?room=' + c);
+  banner('กำลังเข้าห้อง ' + c + '…', 'รอสักครู่');
+
+  let first = true;
+  const fail = err => { console.warn(err); banner('การเชื่อมต่อหลุด', 'รีเฟรชหน้าเพื่อกลับเข้าห้องเดิม'); };
+  subs.push(fdb.doc(roomPath()).onSnapshot(s => {
+    if (!s.exists) { lsDel('rb_session'); code = null; banner('ห้องนี้ไม่มีแล้ว', 'กลับไปหน้าแรกเพื่อสร้างห้องหรือใส่รหัสใหม่'); setTimeout(leaveRoom, 2500); return; }
+    const d = s.data();
+    if (!s.metadata.hasPendingWrites || first) {
+      if (!timers.cfg || first) config = { title: d.title || '', order: Array.isArray(d.order) ? [...d.order] : [] };
+      scores = d.scores || {}; awarded = d.awarded || {}; board = d.board || [];
+    }
+    const prevPhase = live?.phase;
+    live = d.live ? clone(d.live) : null;
+    if ((live?.qid || null) !== lastQid) { lastQid = live?.qid || null; localOpened = {}; }
+    if (first) {
+      first = false; lastNonce = live?.spin?.nonce || '';
+      lastRevealKey = live?.phase === 'revealed' ? live.qid + '|' + (live.spin?.nonce || '') : null;
+      if (isHost) { rememberRoom(); showTab(false); } else show('stage');
+      renderStage(); return;
+    }
+    if (live?.spin && live.spin.nonce !== lastNonce) {
+      lastNonce = live.spin.nonce;
+      if (live.phase === 'spinning' && Q[live.qid] && !spinning) { runSpin(live.qid, live.spin.slots || []); return; }
+    }
+    const rk = live?.phase === 'revealed' ? live.qid + '|' + (live.spin?.nonce || '') : null;
+    if (rk && rk !== lastRevealKey && !spinning) { lastRevealKey = rk; renderStage(); fanfare(); confetti(); return; }
+    if (!rk) lastRevealKey = null;
+    if ($('host').hidden) renderStage(); else renderHost();
+  }, fail));
+  subs.push(fdb.collection(roomPath() + '/questions').onSnapshot(snap => {
+    let changed = false;
+    snap.docChanges().forEach(ch => {
+      const id = ch.doc.id;
+      if (pendingQ.has(id)) return;
+      if (ch.type === 'removed') { if (Q[id]) { delete Q[id]; changed = true; } return; }
+      const d = ch.doc.data();
+      const next = { label: d.label || '', slots: Array.isArray(d.slots) && d.slots.length ? d.slots.map(x => ({ img: x.img || '', text: x.text || '' })) : [emptySlot()] };
+      if (JSON.stringify(next) !== JSON.stringify(Q[id])) { Q[id] = next; changed = true; }
+    });
+    if (changed) { if ($('host').hidden) renderStage(); else renderHost(); }
+  }, fail));
+  if (isHost) {
+    subs.push(fdb.collection(roomPath() + '/secret').onSnapshot(snap => {
+      snap.docChanges().forEach(ch => {
+        if (pendingS.has(ch.doc.id)) return;
+        if (ch.type === 'removed') delete S[ch.doc.id]; else S[ch.doc.id] = { answer: ch.doc.data().answer || '', note: ch.doc.data().note || '' };
+      });
+      if ($('host').hidden) renderStage(); else renderHost();
+    }, fail));
+    subs.push(fdb.collection(roomPath() + '/players').onSnapshot(snap => {
+      players = {}; snap.docs.forEach(x => { players[x.id] = x.data(); });
+      renderInvite(); renderFeed();
+    }, fail));
+  } else {
+    subs.push(fdb.doc(roomPath() + '/players/' + pid).onSnapshot(s => {
+      if (!s.exists) return;
+      const d = s.data(); if (d.name) myName = d.name;
+      if (!s.metadata.hasPendingWrites) { myGuess = d.guess || null; renderGuessCard(); }
+    }, fail));
+  }
+}
+
+/* ---------- start ---------- */
+async function start() {
+  bulbs(); addEventListener('resize', bulbs);
+  const cfg = window.__FIREBASE_CONFIG__;
+  if (typeof firebase === 'undefined' || !cfg || !cfg.apiKey) { banner('โหลดระบบไม่สำเร็จ', 'ตรวจอินเทอร์เน็ตแล้วรีเฟรชหน้าอีกครั้ง'); return; }
+  try {
+    firebase.initializeApp(cfg);
+    fdb = firebase.firestore();
+    try { fdb.settings({ experimentalAutoDetectLongPolling: true, merge: true }); } catch {}
+  } catch (e) { console.error(e); banner('โหลดระบบไม่สำเร็จ', 'รีเฟรชหน้าอีกครั้ง'); return; }
+
+  const urlCode = (new URLSearchParams(location.search).get('room') || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  let sess = null; try { sess = JSON.parse(lsGet('rb_session', 'null')); } catch {}
+  if (urlCode && sess && sess.code === urlCode) {
+    if (sess.role === 'host') return enterRoom(urlCode, 'host');
+    try {
+      const me = await fdb.doc('games/rebus-' + urlCode + '/players/' + pid).get();
+      if (me.exists) { myName = me.data().name || lsGet('rb_name', ''); return enterRoom(urlCode, 'player'); }
+    } catch {}
+  }
+  renderHome();
+  if (urlCode) { $('joinCode').value = urlCode; $('joinName').focus(); }
+}
+start();
+})();
+</script>
+</body>
+</html>
