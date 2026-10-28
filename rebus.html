@@ -147,7 +147,12 @@ button:focus-visible, input:focus-visible, .drop:focus-visible { outline: 3px so
 .guess-row input { flex: 1; }
 .mine { font-size: 14px; color: var(--muted); margin: 0; }
 .mine b { color: var(--paper); }
-.mine .ok { color: var(--ok); } .mine .bad { color: var(--bad); }
+.mine .ok { color: var(--ok); } .mine .bad { color: var(--bad); } .mine .wait { color: var(--gold); }
+.judge { display: flex; gap: 6px; }
+.judge button { font: 700 16px var(--font-num); width: 40px; height: 36px; border-radius: 10px; cursor: pointer; background: transparent; border: 2px solid var(--line); color: var(--muted); }
+.judge .ok.on { background: var(--ok); border-color: var(--ok); color: var(--ink); }
+.judge .bad.on { background: var(--bad); border-color: var(--bad); color: var(--ink); }
+.judge button:hover:not(.on) { border-color: var(--paper); color: var(--paper); }
 
 /* host editor */
 .host { max-width: 1080px; width: 100%; margin: 20px auto 0; display: flex; flex-direction: column; gap: 16px; }
@@ -290,7 +295,7 @@ input::placeholder { color: #8c7bb0; }
         <ul class="list" id="feed"></ul>
       </section>
       <section class="card">
-        <h3>คะแนน <small>ตอบถูก = 1 คะแนน</small></h3>
+        <h3>คะแนน <small>host ติ๊ก ✓ = 1 คะแนน</small></h3>
         <ul class="list" id="scores"></ul>
       </section>
     </div>
@@ -332,7 +337,7 @@ const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 let fdb = null, code = null, isHost = false, myName = '';
 let config = { title: '', order: [] };
 const Q = {}, S = {};
-let live = null, scores = {}, awarded = {}, board = [], players = {}, myGuess = null;
+let live = null, scores = {}, marks = {}, board = [], players = {}, myGuess = null;
 let spinning = false, lastNonce = null, lastQid = null, lastRevealKey = null, localOpened = {}, showSecret = false;
 let subs = [];
 const pendingQ = new Set(), pendingS = new Set();
@@ -520,19 +525,41 @@ function reveal() {
   setLive({ qid, phase: 'revealed', opened: Q[qid].slots.map(() => true), answer: s.answer || '', note: s.note || '' });
   lastRevealKey = qid + '|' + (live.spin?.nonce || '');
   fanfare(); confetti();
-  award(qid, s.answer || '');
+  autoMark(qid, s.answer || '');
 }
 function makeBoard(sc) {
   return Object.entries(sc).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1])
     .map(([id, v]) => ({ id, name: players[id]?.name || 'ผู้เล่น', score: v }));
 }
-function award(qid, answer) {
-  if (!answer || awarded[qid]) return;
-  const right = Object.entries(players).filter(([, p]) => p.guess && p.guess.qid === qid && norm(p.guess.text) === norm(answer));
-  scores = { ...scores }; right.forEach(([id]) => { scores[id] = (scores[id] || 0) + 1; });
-  awarded = { ...awarded, [qid]: true };
+// marks[qid][pid] = { ok, text } — the host's verdict on that player's guess; scores are just the count of ok marks
+function markOf(qid, id) {
+  const m = marks[qid]?.[id], g = players[id]?.guess;
+  return m && g && g.qid === qid && m.text === g.text ? m : null;
+}
+function saveMarks() {
+  scores = {};
+  Object.values(marks).forEach(byP => Object.entries(byP).forEach(([id, m]) => { if (m.ok) scores[id] = (scores[id] || 0) + 1; }));
   board = makeBoard(scores);
-  roomUpdate({ scores, awarded, board });
+  roomUpdate({ marks, scores, board });
+  renderFeed(); renderScores();
+}
+function setMark(qid, id, ok) {
+  const g = players[id]?.guess;
+  if (!isHost || !g || g.qid !== qid) return;
+  const cur = markOf(qid, id);
+  marks = { ...marks, [qid]: { ...(marks[qid] || {}) } };
+  if (cur && cur.ok === ok) delete marks[qid][id];   // tap the same button again = undo
+  else marks[qid][id] = { ok, text: g.text };
+  saveMarks();
+}
+// on reveal, guesses that exactly match the answer get ✓ unless the host already judged them
+function autoMark(qid, answer) {
+  if (!answer) return;
+  const add = Object.entries(players).filter(([id, p]) => p.guess && p.guess.qid === qid && !markOf(qid, id) && norm(p.guess.text) === norm(answer));
+  if (!add.length) return;
+  marks = { ...marks, [qid]: { ...(marks[qid] || {}) } };
+  add.forEach(([id, p]) => { marks[qid][id] = { ok: true, text: p.guess.text }; });
+  saveMarks();
 }
 function go(d) {
   if (!isHost || spinning) return;
@@ -562,8 +589,8 @@ function armed(b, label, armedLabel) {
 }
 $('resetBtn').onclick = e => {
   if (!armed(e.currentTarget, 'ล้างคะแนน + กลับข้อแรก', 'กดอีกครั้งเพื่อยืนยัน')) return;
-  scores = {}; awarded = {}; board = [];
-  roomUpdate({ scores, awarded, board });
+  scores = {}; marks = {}; board = [];
+  roomUpdate({ scores, marks, board });
   localOpened = {};
   setLive({ qid: order()[0] || '', phase: 'idle', opened: [], answer: '', note: '', spin: null });
 };
@@ -575,13 +602,15 @@ function renderGuessCard() {
   $('meName').textContent = myName;
   const qid = live?.qid && Q[live.qid] ? live.qid : null;
   const revealed = qid && live.phase === 'revealed';
-  $('guessInput').disabled = $('guessBtn').disabled = !qid || revealed;
   const g = myGuess && myGuess.qid === qid ? myGuess : null;
+  const mk = g ? marks[qid]?.[pid] : null, judged = mk && mk.text === g.text ? mk : null;
+  $('guessInput').disabled = $('guessBtn').disabled = !qid || revealed || !!judged;
   const m = $('mine');
   if (!qid) m.textContent = 'รอ host เริ่มข้อแรก';
-  else if (!g) m.textContent = revealed ? 'ข้อนี้คุณไม่ได้ส่งคำตอบ' : 'ส่งได้หลายครั้ง ระบบนับคำตอบล่าสุดก่อนเฉลย';
+  else if (!g) m.textContent = revealed ? 'ข้อนี้คุณไม่ได้ส่งคำตอบ' : 'ส่งได้หลายครั้ง host จะตรวจคำตอบล่าสุดของคุณ';
   else {
-    m.innerHTML = `คำตอบของคุณ: <b></b>${revealed ? (norm(g.text) === norm(live.answer) ? ' <span class="ok">✓ ถูก</span>' : ' <span class="bad">✗ ยังไม่ถูก</span>') : ''}`;
+    const verdict = judged ? (judged.ok ? ' <span class="ok">✓ ถูก</span>' : ' <span class="bad">✗ ไม่ถูก</span>') : ' <span class="wait">รอ host ตรวจ…</span>';
+    m.innerHTML = `คำตอบของคุณ: <b></b>${verdict}`;
     m.querySelector('b').textContent = g.text;
   }
 }
@@ -618,18 +647,24 @@ function renderFeed() {
   $('feedCount').textContent = rows.length ? `ตอบแล้ว ${rows.length} คน` : '';
   if (!rows.length) { $('feed').innerHTML = '<li style="display:block" class="empty">ยังไม่มีใครส่งคำตอบข้อนี้</li>'; return; }
   const ans = S[qid]?.answer || '';
+  const todo = rows.filter(([id]) => !markOf(qid, id)).length;
+  if (todo) $('feedCount').textContent += ` · รอตรวจ ${todo}`;
   $('feed').innerHTML = '';
-  rows.forEach(([, p]) => {
-    const li = document.createElement('li'), ok = ans && norm(p.guess.text) === norm(ans);
-    li.innerHTML = `<div class="who"><span></span><small></small></div><span class="tag ${ans ? (ok ? 'ok' : 'bad') : ''}">${ans ? (ok ? '✓' : '✗') : ''}</span>`;
+  rows.forEach(([id, p]) => {
+    const li = document.createElement('li'), m = markOf(qid, id), match = ans && norm(p.guess.text) === norm(ans);
+    li.innerHTML = `<div class="who"><span></span><small></small></div><div class="judge">
+      <button type="button" class="ok${m?.ok === true ? ' on' : ''}" aria-label="ถูก">✓</button>
+      <button type="button" class="bad${m?.ok === false ? ' on' : ''}" aria-label="ผิด">✗</button></div>`;
     li.querySelector('.who span').textContent = p.guess.text;
-    li.querySelector('small').textContent = p.name || 'ผู้เล่น';
+    li.querySelector('small').textContent = (p.name || 'ผู้เล่น') + (match ? ' · ตรงเฉลย' : '');
+    li.querySelector('.judge .ok').onclick = () => setMark(qid, id, true);
+    li.querySelector('.judge .bad').onclick = () => setMark(qid, id, false);
     $('feed').appendChild(li);
   });
 }
 function renderScores() {
   const rows = (board || []).slice(0, 20);
-  if (!rows.length) { $('scores').innerHTML = '<li style="display:block" class="empty">ยังไม่มีคะแนน คนที่ตอบถูกก่อนกดเฉลยจะได้คะแนน</li>'; return; }
+  if (!rows.length) { $('scores').innerHTML = '<li style="display:block" class="empty">ยังไม่มีคะแนน host ติ๊ก ✓ ให้คำตอบที่ถูก = 1 คะแนน</li>'; return; }
   $('scores').innerHTML = '';
   rows.forEach(r => {
     const li = document.createElement('li');
@@ -880,7 +915,7 @@ $('createBtn').onclick = async () => {
   const b = $('createBtn'); b.disabled = true; b.textContent = 'กำลังสร้าง…';
   try {
     const c = await newCode();
-    await fdb.doc('games/rebus-' + c).set({ title: '', order: [], live: null, scores: {}, awarded: {}, board: [], createdAt: firebase.firestore.FieldValue.serverTimestamp() });
+    await fdb.doc('games/rebus-' + c).set({ title: '', order: [], live: null, scores: {}, marks: {}, board: [], createdAt: firebase.firestore.FieldValue.serverTimestamp() });
     code = c; isHost = true; rememberRoom();
     await enterRoom(c, 'host', true);
   } catch (e) {
@@ -910,7 +945,7 @@ $('joinForm').addEventListener('submit', async e => {
 function resetRoomState() {
   subs.forEach(u => { try { u(); } catch {} }); subs = [];
   Object.keys(Q).forEach(k => delete Q[k]); Object.keys(S).forEach(k => delete S[k]);
-  config = { title: '', order: [] }; live = null; scores = {}; awarded = {}; board = []; players = {}; myGuess = null;
+  config = { title: '', order: [] }; live = null; scores = {}; marks = {}; board = []; players = {}; myGuess = null;
   spinning = false; lastNonce = null; lastQid = null; lastRevealKey = null; localOpened = {};
   $('machine').classList.remove('spinning');
 }
@@ -935,7 +970,7 @@ async function enterRoom(c, role, fresh) {
     const d = s.data();
     if (!s.metadata.hasPendingWrites || first) {
       if (!timers.cfg || first) config = { title: d.title || '', order: Array.isArray(d.order) ? [...d.order] : [] };
-      scores = d.scores || {}; awarded = d.awarded || {}; board = d.board || [];
+      scores = d.scores || {}; marks = d.marks || {}; board = d.board || [];
     }
     const prevPhase = live?.phase;
     live = d.live ? clone(d.live) : null;
